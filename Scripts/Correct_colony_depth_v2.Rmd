@@ -1,0 +1,100 @@
+---
+title: "Correct_colony_depth"
+author: "Hugo DENIS"
+date: "25/10/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+###############################################################################################
+######### Correct colonies depth obtained from dive computer to account for tide level ########
+###############################################################################################
+
+#Requires at least
+1/ colonies_metadata file with Genotype ID, Collection DateTime, Depth, Reef.name
+
+2/ tide_data file with for each Reef.name,  lowest/highest tides and corresponding times organized as follow
+Reef.name , Time1, Time2, Time3, Time4, Level1, Level2, Level3, Level4
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(stringr)
+library(tidyr)
+
+#Set to English
+Sys.setenv("LANGUAGE"="En")
+Sys.setlocale(locale = "C")
+```
+
+#Load data
+```{r}
+#Colony data
+path="/data1/Denis/Hugo/Data/"
+colonies_metadata<-read.csv(file=paste0(path,"RRAP 2022 field data sheets_Feb-Mar_colony.csv"),header=T,check.names = F)
+
+#Tide data
+tide_data<-read.csv(paste0(path,"tide_data_ECT1_v3.csv"),header=T,sep=";",dec=".",check.names=F)
+names(tide_data)[1]<-"Reef.name"
+
+#Merge the two tables
+colonies_metadata<-colonies_metadata %>% merge(tide_data %>% dplyr::select(Reef.name,Time1:Level4),by="Reef.name",all.x=T)
+
+#Convert times to POSIXct
+colonies_metadata[,c("Time1","Time2","Time3","Time4")]<-lapply(colonies_metadata[,c("Time1","Time2","Time3","Time4")],function(x)as.POSIXct(paste(colonies_metadata$`Collection date`,x,sep=" "),format="%d/%m/%Y %H:%M:%S"))
+```
+
+
+#### Depth correction of the tide at the time of collection
+```{r}
+for(i in 1:nrow(colonies_metadata)){
+  
+  #Avoid missing values
+  if(!is.na(colonies_metadata$Depth[i])){
+#Take into account the case where time of sampling equals one of tide times   
+      if(colonies_metadata[i,"Time"] %in% c(colonies_metadata[i,"Time1"],colonies_metadata[i,"Time2"],colonies_metadata[i,"Time3"],colonies_metadata[i,"Time4"])){
+        id_equal=which(c(colonies_metadata[i,"Time1"],colonies_metadata[i,"Time2"],colonies_metadata[i,"Time3"],colonies_metadata[i,"Time4"])==colonies_metadata[i,"Time"])
+        colonies_metadata$Tide_adjust[i]=colonies_metadata[i,paste0("Level",as.character(id_equal))] 
+      }else{
+          #Find Highest/Lowest tide flanking time of collection
+      id_inf=max(which(c(colonies_metadata[i,"Time1"],colonies_metadata[i,"Time2"],colonies_metadata[i,"Time3"],colonies_metadata[i,"Time4"])<colonies_metadata[i,"Time"]))
+      id_sup=min(which(c(colonies_metadata[i,"Time1"],colonies_metadata[i,"Time2"],colonies_metadata[i,"Time3"],colonies_metadata[i,"Time4"])>colonies_metadata[i,"Time"]))
+      time_inf=paste0("Time",as.character(id_inf))
+      time_sup=paste0("Time",as.character(id_sup))
+      level_inf=paste0("Level",as.character(id_inf))
+      level_sup=paste0("Level",as.character(id_sup))
+      
+      #Find parameters of sinusoid curve passing through those 2 points
+      diff=(colonies_metadata[i,level_inf]-colonies_metadata[i,level_sup])
+      #Amplitude
+      A=abs(diff/2)
+      #Period
+      b=pi/as.numeric(difftime(colonies_metadata[i,time_sup], colonies_metadata[i,time_inf], units = "min"))
+      #Phase
+      c=as.numeric(difftime(colonies_metadata[i,if_else(diff>0,time_inf,time_sup)],as.POSIXct(paste0(format(colonies_metadata[i,c("Time1")],format="%Y-%m-%d")," ","00:00:00"),format="%Y-%m-%d %H:%M:%S"),units="min"))-pi/(2*b)
+      #Vertical Shift
+      d=(colonies_metadata[i,level_inf]+colonies_metadata[i,level_sup])/2
+      
+      #Find tide height at the time of collection
+      timemin=as.numeric(difftime(colonies_metadata[i,"Time"],as.POSIXct(paste0(format(colonies_metadata[i,c("Time1")],format="%Y-%m-%d")," ","00:00:00"),format="%Y-%m-%d %H:%M:%S"),units="min"))
+      y=A*sin(b*(timemin-c))+d
+  
+      colonies_metadata$Tide_adjust[i]=y
+      } 
+  } else {
+    colonies_metadata$Tide_adjust[i]=NA
+  }
+  
+}
+
+#correct depth with the tide 
+colonies_metadata$Depth_corrected=round(colonies_metadata$Depth-colonies_metadata$Tide_adjust,1)
+
+#Save as csv with the new column 
+write.csv(colonies_metadata %>% dplyr::select(-c(Time1:Level4)),paste0(path,"RRAP 2022 field data sheets_Feb-Mar_colony.csv"),row.names = F)
+
+```
+
