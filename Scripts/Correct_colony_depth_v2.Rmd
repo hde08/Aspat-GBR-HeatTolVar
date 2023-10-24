@@ -33,7 +33,7 @@ Sys.setlocale(locale = "C")
 #Load data
 ```{r}
 #Colony data
-path="/data1/Denis/Hugo/Data/"
+path="Data/"
 colonies_metadata<-read.csv(file=paste0(path,"RRAP 2022 field data sheets_Feb-Mar_colony.csv"),header=T,check.names = F)
 
 #Tide data
