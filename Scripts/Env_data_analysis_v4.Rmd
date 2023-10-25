@@ -1,0 +1,170 @@
+---
+title: "Environment_data_analysis_v2"
+author: "Hugo DENIS"
+date: "22/07/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## This script is the re-Analysis of environmental data at ECT1 sites
+## For A.spathulata data after re-extracion of environmental variables from
+#various sources at the colony level when available 
+
+#Think about incorporating PCAtest
+
+```{r,include=F}
+library(dplyr)
+library(stringr)
+library(lubridate)
+library(tidyr)
+library(ggplot2)
+library(stringr)
+library(readr)
+library(tidyverse)
+library(ggfortify)
+library(cowplot)
+library(ggpmisc)
+library(factoextra)
+library(corrplot)
+
+#Set to English
+Sys.setenv("LANGUAGE"="En")
+Sys.setlocale(locale = "C")
+```
+
+#Import environmental data at the colony and site level 
+
+#Note : DHW_max_1year is almost equivalent to DHW at time of collection and DHW_max_6year is almost equivalent to DHW_max so no need to include them
+
+```{r}
+path="/data1/Denis/"
+colony_env=read.csv(paste0(path,"Hugo/Data/GBR_env_data/ECT1_Aspat_colonies_environmental_data_24metrics.csv"),header=T)
+
+#Define color palette for sites
+mycolors<-c("#1ba3c6" ,"#2cb5c0" ,"#21B087", "#33a65c" ,"#a2b627" ,"#f8b620", "#f89217", "#f06719","#e03426" ,"#f64971", "#fc719e" , "#ce69be", "#7873c0", "#4f7cba")
+```
+
+#Plot pearson correlation between those metrics 
+```{r}
+colony_env=colony_env %>% column_to_rownames(var="Genotype")
+
+cor=cor(colony_env_sub,method="pearson")
+
+png(height=465, width=465, file=paste0(path,"Hugo/Figures/Env_analysis/Env_var_correlations_reduced_v8.png"),res=300,units='mm')
+corrplot::corrplot(cor, order = 'hclust', addrect = 5,col = COL2('RdYlBu', 10),cl.pos = 'b',tl.cex=2,cl.cex = 2,tl.col='black')
+dev.off()
+```
+
+#Output tables for supplementary data 
+#Save a dataset with "uncorrelated" variables (R<0.7)
+```{r}
+#Make table for Supplementary Table 9b
+#Group variables with pairwise correlation coefficients above 0.7
+pw_cor=data.frame()
+for(i in 1:nrow(cor)){
+  for(j in 1:nrow(cor)){
+    if(abs(cor[i,j])>0.7 & i!=j){
+      pw_cor=rbind(pw_cor,data.frame(Var1=rownames(cor)[i],Var2=colnames(cor)[j],Cor=cor[i,j]))
+    }
+  }
+}
+print(pw_cor)
+write.csv(pw_cor,paste0(path,"/Hugo/Data/GBR_env_data/Pairwise_correlations_v5_0.7.csv"),row.names=F)
+
+#List of correlated variables to remove from pairwise correlations
+redundant=c("LMM","OM","OMsd","MMM","CF_OM","CF_ss","Chl_a_OM","DHW_freq_sup8","DHW_max","Oxygen_OM","DHW_freq_sup4_6year","Tot_N_OM","PIP_OM")
+
+colony_env_uncor=colony_env %>% dplyr::select(-all_of(redundant))
+
+cor_uncor=cor(colony_env_uncor)
+write.csv(cor_uncor,paste0(path,"Hugo/Data/GBR_env_data/ECT1_Aspat_colonies_environmental_data_inf_0.7_correlation_matrix.csv"),row.names=F)
+
+#%ake table of uncorrelated variables to use in random forest 
+colony_env_sub_uncor$Genotype=rownames(colony_env_sub_uncor)
+write.csv(colony_env_sub_uncor,paste0(path,"Hugo/Data/GBR_env_data/ECT1_Aspat_colonies_environmental_data_uncor_v3_0.7.csv"),row.names=F)
+
+#Make supplementary table 9a
+colony_env_sub_uncor=colony_env_sub_uncor %>% dplyr::select(-Genotype)
+kept_var_table=data.frame(Kept_metric=colnames(colony_env_sub_uncor))
+
+#Find the var with wich the variables that we have excluded were the most correlated
+bestcor=data.frame()
+for(var in redundant){
+  cors=cor[var,]
+  bestcor=rbind(bestcor,data.frame(redundant=var,best_cor=names(which.max(abs(cors[!names(cors) %in% c(redundant,var)])))))
+}
+
+group_table_sum<-bestcor %>% group_by(best_cor) %>% 
+  dplyr::summarize(Variables=paste(redundant,collapse=", "))
+
+kept_var_table=kept_var_table %>% merge(group_table_sum,by.x="Kept_metric",by.y="best_cor",all.x=T)
+
+write.csv(kept_var_table,paste0(path,"/Hugo/Results/GBR_Env/var_correlated_group_v3_0.7.csv"),row.names=F)
+```
+
+
+#Global PCA on the 11 metrics that are low correlated R<0.9
+```{r}
+path="/data1/Denis/Hugo/"
+
+#Retrieve color scale 
+sites_data=read.csv(paste0(path,"Data/GBR_env_data/sites_data_ECT1.csv"),header=T,sep=";")
+colnames(sites_data)[1]="Reef.Name"
+sites_data=sites_data %>% subset(Reef.Name %in% pheno_data$Site.name)
+
+mycolors<-c("#1ba3c6" ,"#2cb5c0" ,"#21B087", "#33a65c" ,"#a2b627" ,"#f8b620", "#f89217", "#f06719","#e03426" ,"#f64971", "#fc719e" , "#ce69be", "#7873c0", "#4f7cba")
+#Order site names by MMM
+names(mycolors)<-sites_data$Reef.Name[order(sites_data$MMM)]
+
+colony_env_wide_red=read.csv(paste0(path,"Data/GBR_env_data/ECT1_Aspat_colonies_environmental_data_uncor_v3_0.7.csv"),header=T)
+
+colony_env_wide_all=read.csv(paste0(path,"Data/GBR_env_data/ECT1_Aspat_colonies_environmental_data_24metrics.csv"),header=T)
+
+#Add site name info to table 
+pheno_data=read.csv(paste0(path,"Results/Phenotypic_trait_per_genotype.csv"),header=T)
+colony_env_wide_all=colony_env_wide_all %>% merge(pheno_data %>% distinct(Site.name,Genotype),by="Genotype")
+
+#Arrows name (only R<0.7 + MMM)
+arrow_name=c(colnames(colony_env_wide_red),"MMM","Site.name","Genotype")
+
+#Run PCA
+env.pca<-prcomp(colony_env_wide_all %>% dplyr::select(-c(Genotype,Site.name)),center=T,scale.=T)
+
+sites=colony_env_wide_all$Site.name
+
+#Main PCA Plot 
+pca_plot<-autoplot(env.pca,label=F,label.size=50,colour="transparent",loadings=T,loadings.label=F,loadings.colour="grey",loadings.label.colour = "black",loadings.label.repel = F,loadings.label.size=5) + theme_classic() + geom_point(aes(colour=sites),alpha=0.2,size=2) + theme(axis.text.x=element_text(size=20,color="black"),axis.text.y=element_text(size=20,color="black"),axis.title.x = element_text(size=20,color="black"),axis.title.y = element_text(size=20,color="black",margin = ggplot2::margin(t = 0, r = 15, b = 0, l = 0)),legend.title = element_text(size=20,color="black"),legend.text = element_text(size=20,color="black"),legend.position = "none",legend.background = element_rect(fill = "transparent"),
+          panel.background = element_rect(colour = "black", size=1.5)) + scale_colour_manual(values = mycolors,name="Site name",labels=names(mycolors)) + guides(colour = guide_legend(override.aes = list(size=5))) 
+
+dat_pca=data.frame(PC1=pca_plot$data$PC1,PC2=pca_plot$data$PC2)
+dat_pca$Site.name=sites
+sites_pca_barycentre=dat_pca %>% group_by(Site.name) %>% dplyr::summarize(PC1=mean(PC1),PC2=mean(PC2))
+
+
+#Adjust label position to avoid overlap
+sites_pca_barycentre$hjust=c(0.003,0,0.005,-0.002,0,0.004,-0.002,-0.01,-0.002,0.00,0.004,-0.01,-0.006,0)
+sites_pca_barycentre$vjust=c(0.002,-0.004,0.006,0,0,0,0,-0.002,-0.003,-0.002,0.001,-0.005,0.004,-0.005)
+
+#Get scaling factor from autoplot
+scores <- data.frame(env.pca$x[, 1:2])
+scores[] <- lapply(scores, function(x) x / sqrt(sum((x - mean(x))^2)))
+loadings <- as.data.frame(env.pca$rotation)[1:2]
+scale <- min(max(abs(scores$PC1))/max(abs(loadings$PC1)),
+             max(abs(scores$PC2))/max(abs(loadings$PC2))) * 0.8
+
+#Modify loadings names to keep only uncorrelated ones 
+PCAloadings <- data.frame(Variables = rownames(env.pca$rotation), env.pca$rotation)
+PCAloadings$Variables[!PCAloadings$Variables %in% c(colnames(colony_env_wide_red),"MMM")]=""
+
+
+pca_plot=pca_plot+ ggrepel::geom_text_repel(size=7.5,aes(x=PC1+hjust,y=PC2+vjust,label=Site.name,colour=Site.name),data=sites_pca_barycentre) + scale_colour_manual(values = mycolors,name="Site name",labels=names(mycolors)) +annotate("text", x = (PCAloadings$PC1)*scale, y = (PCAloadings$PC2)*scale,
+     label = PCAloadings$Variables,size=6)
+
+pca_plot$layers[[2]]$aes_params$size <- 0.7
+pca_plot$layers[[1]]$aes_params$size <- 50
+
+ggsave(pca_plot,filename=paste0(path,"Figures/Env_analysis/PCA_env_colonies_red_v3.png"),width=14,height=10,dpi=320)
+```
