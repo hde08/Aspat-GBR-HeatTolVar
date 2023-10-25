@@ -1,0 +1,419 @@
+---
+title: "Phenotypic variation analyses GCB paper"
+author: "Hugo DENIS"
+date: "2022-12-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r,message=F,include=FALSE}
+library(dplyr)
+library(readr)
+library(tidyr)
+library(ggplot2)
+library(ggrepel)
+library(drc)
+library(rstatix)
+library(stringr)
+library(car)
+library(Rmisc)
+library(cowplot)
+library(ggpubr)
+
+library(ggspatial)
+library(ggnewscale)
+library(heatmaply)
+library(corrplot)
+
+library(packcircles)
+library(palr)
+library(scatterpie)
+library(RColorBrewer)
+
+
+#Load plotting functions 
+path="/data1/Denis/Hugo/"
+source(paste0(path,"Scripts/heat_tol_variation_plotting_functions.R"))
+```
+
+#Read data 
+```{r}
+#Phenotypic data
+pheno_data=read.csv(paste0(path,"Results/Phenotypic_trait_per_genotype.csv"),header=T)
+
+#Sites coordinates and MMM
+sites_data=read.csv(paste0(path,"Data/GBR_env_data/Aspath_sites_data.csv"))
+
+#Create site color palette, ordered by MMM
+mycolors<-c("#1ba3c6" ,"#2cb5c0" ,"#21B087", "#33a65c" ,"#a2b627" ,"#f8b620", "#f89217", "#f06719","#e03426" ,"#f64971", "#fc719e" , "#ce69be", "#7873c0", "#4f7cba")
+#Order site names by MMM
+names(mycolors)<-sites_data$Site.name[order(sites_data$MMM)]
+
+Both.sites=read.csv(paste0(path,"Data/GBR_PAM/Sites_thermal_tolerance_summary_v2.csv"),header=T)
+#Exclude St Crispin
+Both.sites=Both.sites[1:13,]
+
+modif_pos=read.csv(paste0(path,"/Data/Sites_thermal_tolerance_pos_adjusted.csv"),header=T,sep=";")
+colnames(modif_pos)[1]="Site.name"
+```
+
+1/ Analyse heat tolerance variation among and within sites
+
+
+#Test differences in mean and variance between sites for each trait and metric 
+```{r}
+#Compute residuals as absolute deviation from the median
+medians=pheno_data %>% group_by(Site.name,Metric,Trait) %>% dplyr::summarise(median=median(Value))
+
+pheno_data=pheno_data %>% mutate(Site_Trait_Met=paste(Site.name,Trait,Metric,sep="_")) %>% merge(medians %>% mutate(Site_Trait_Met=paste(Site.name,Trait,Metric,sep="_"), by="Site_Trait_Met"))
+pheno_data$residuals <- abs(pheno_data$Value - pheno_data$median)
+
+#Perform leveneTest
+df_omega=data.frame()
+for(t in unique(pheno_data$Trait)){
+  for(m in unique(pheno_data$Metric)){
+    res.aov <- aov(residuals ~ Site.name, pheno_data %>% subset(Metric==m & Trait==t))
+capture.output(summary(res.aov),file=paste0("D:/Hugo/Results/1st_paper/Levene_",m,"_",t,".txt"),sep="\t",append=TRUE)
+  #Post-hoc levene's test
+  tukey=TukeyHSD(res.aov)
+df.post.hoc=data.frame(tukey$Site.name)
+write.csv(df.post.hoc,paste0("D:/Hugo/Results/1st_paper/Levene_posthoc_",m,"_",t,".csv"),row.names=T)
+
+  #Perform Welch Anova 
+  welch <- oneway.test(Value ~ Site.name, data = pheno_data %>% subset(Metric==m & Trait==t),var.equal=F)
+  df_welch=data.frame(tidy(welch))
+  write.csv(df_welch,paste0("D:/Hugo/Results/1st_paper/Welch_anova_",m,"_",t,".csv"),row.names=T)
+  
+  welch2 <- oneway.test(Value ~ Site.name, data = pheno_data %>% subset(Metric==m & Trait==t & Site.name!="St Crispin"),var.equal=F)
+  
+  b<-tibble(omega.squared = omega.squared(
+  WelchF = welch2$statistic[[1]], df = welch2$parameter[[1]], N = nrow(pheno_data %>% subset(Metric==m & Trait==t & Site.name!="St Crispin"))))
+  
+  df_omega=rbind(df_omega,data.frame(Trait=t,Metric=m,omega=b$omega.squared))
+  }
+}
+
+#Games howell posthoc tests
+GH=pheno_data %>% group_by(Trait,Metric) %>% games_howell_test(Value ~ Site.name) %>% arrange(Trait,Metric,p.adj)
+write.csv(GH,"D:/Hugo/Results/1st_paper/GH_posthoc_phenotype.csv",row.names=F)
+```
+
+
+#Compute adjusted ED50s to look at within site variation
+```{r}
+mod_fvfm <- lm(Value ~ Site.name, data = pheno_data %>% subset(Trait=="FvFm" & Metric=="ED50"))
+res.fvfm <- augment(mod_fvfm, data = pheno_data %>% subset(Trait=="FvFm" & Metric=="ED50")) %>%
+  mutate(ed50.fvfm_adj = mean((pheno_data %>% subset(Trait=="FvFm" & Metric=="ED50"))$Value) + .resid)
+
+mod_ndvi <- lm(Value ~ Site.name, data = pheno_data %>% subset(Trait=="NDVI" & Metric=="ED50"))
+res.ndvi <- augment(mod_ndvi, data = pheno_data %>% subset(Trait=="NDVI" & Metric=="ED50")) %>%
+  mutate(ed50.ndvi_adj = mean((pheno_data %>% subset(Trait=="NDVI" & Metric=="ED50"))$Value) + .resid)
+
+ed50_adj=res.fvfm %>% dplyr::select(c(Site.name,Genotype,ed50.fvfm_adj)) %>% merge(res.ndvi %>% dplyr::select(c(Genotype,ed50.ndvi_adj)),by="Genotype")
+
+range(res.fvfm$ed50.fvfm_adj)
+range(res.ndvi$ed50.ndvi_adj)
+```
+
+#Assess correlation between FvFm and NDVI metrics 
+#Use spearman rather than pearson as the data is not normally distributed  
+```{r}
+pheno_data_wide=pheno_data %>% subset(Site.name!="St Crispin") %>% mutate(Trait_Metric=paste0(Trait,"_",Metric)) %>% dplyr::select(Site.name,Genotype,Trait_Metric,Value) %>% pivot_wider(names_from = Trait_Metric,values_from=Value)
+
+#Global correlation
+cor_ed50_test=cor.test(pheno_data_wide$FvFm_ED50,pheno_data_wide$NDVI_ED50,method="spearman",use="complete.obs")
+
+cor_ratio_test=cor.test(pheno_data_wide$FvFm_Ratio,pheno_data_wide$NDVI_Ratio,method="spearman",use="complete.obs")
+
+global_df=data.frame(Comparison=c("FvFm_ED50-NDVI_ED50","FvFm_Ratio-NDVI_Ratio"),rho=c(cor_ed50_test$estimate,cor_ratio_test$estimate),S=c(cor_ed50_test$statistic,cor_ratio_test$statistic),p.value=c(cor_ed50_test$p.value,cor_ratio_test$p.value))
+write.csv(global_df,paste0("Outputs/Global_correlations.csv"))
+
+#Correlation at each site 
+site_df=data.frame()
+for(site in unique(pheno_data_wide$Site.name)){
+  pheno_data_sub=pheno_data_wide %>% subset(Site.name==site)
+  
+  cor_ed50_test=cor.test(pheno_data_sub$FvFm_ED50,pheno_data_sub$NDVI_ED50,method="spearman",use="complete.obs")
+
+cor_ratio_test=cor.test(pheno_data_sub$FvFm_Ratio,pheno_data_sub$NDVI_Ratio,method="spearman",use="complete.obs")
+
+df=data.frame(Comparison=c("FvFm_ED50-NDVI_ED50","FvFm_Ratio-NDVI_Ratio"),Site.name=site,rho=c(cor_ed50_test$estimate,cor_ratio_test$estimate),S=c(cor_ed50_test$statistic,cor_ratio_test$statistic),p.value=c(cor_ed50_test$p.value,cor_ratio_test$p.value))
+
+site_df=rbind(site_df,df)
+}
+
+write.csv(site_df %>% arrange(Comparison),paste0("Outputs/Site_correlations.csv"))
+```
+
+
+2/ Figures 
+
+# Make Figure 2
+```{r}
+source(paste0(path,"Scripts/heat_tol_variation_plotting_functions.R"))
+
+#Barplot
+p1=heattol_boxplot(pheno_data %>% subset(Trait=="FvFm" & Metric=="ED50"),"Value","Fv/Fm ED50 (°C)",15,34,40,34,40,2,element_blank(),element_blank(),element_blank())
+p2=heattol_boxplot(pheno_data %>% subset(Trait=="FvFm" & Metric=="Ratio"),"Value","Fv/Fm +9℃/MMM",15,0.1,0.9,0.1,0.9,0.2,element_blank(),element_blank(),element_blank())
+
+p3=heattol_boxplot(pheno_data %>% subset(Trait=="NDVI" & Metric=="ED50"),"Value","NDVI ED50 (°C)",15,33,40,33,40,2,element_blank(),element_blank(),element_blank())
+
+p4=heattol_boxplot(pheno_data %>% subset(Trait=="NDVI" & Metric=="Ratio"),"Value","NDVI +9℃/MMM",15,0,0.9,-0.1,0.9,0.2,element_text(size=14.5,color="black",angle=45,hjust=0.95),element_text(size=15,color="black"),element_line())
+
+
+new_palette=c("#1ba3c6" ,"#2cb5c0","#FFF880","#FFE135","#C60012") 
+
+#Histograms
+h1=heattol_histo(pheno_data %>% subset(Trait=="FvFm" & Metric=="ED50"),15,34,40,2,element_blank(),element_blank(),element_blank(),0.2,0.2,140,5,2)
+h2=heattol_histo(pheno_data %>% subset(Trait=="FvFm" & Metric=="Ratio"),15,0.1,0.9,0.2,element_blank(),element_blank(),element_blank(),0.03,0.03,15,0.2,0.3)
+h3=heattol_histo(pheno_data %>% subset(Trait=="NDVI" & Metric=="ED50"),15,33,40,2,element_blank(),element_blank(),element_blank(),0.2,0.2,120,2,3)
+h4=heattol_histo(pheno_data %>% subset(Trait=="NDVI" & Metric=="Ratio"),15,-0.1,0.9,0.2,element_text(size=15,color="black"),element_text(size=15,color="black"),element_line(),0.03,0.03,20,0.8,0.3)
+
+#Create external color legend 
+dummy_plot=sites_data %>% ggplot() + geom_boxplot(aes(x=Site.name,y=Lat,fill=MMM))+ theme(legend.title = element_text(size=17,color="black"),legend.text = element_text(size=17,color="black"),legend.background = element_rect(fill = "transparent"),legend.key.height = unit(20,"mm"),legend.key.width = unit(4,"mm")) +scale_fill_gradientn(colours = new_palette,limits=c(27,29),breaks=c(27,27.25,27.5,27.75,28,28.25,28.5,28.75,29)) 
+col_legend=ggpubr::get_legend(dummy_plot)
+
+global_plot=ggdraw() +draw_plot(p1,x=0.004,y=0.775,width=0.6495,height=0.23)+  draw_plot(p2,x=0,y=0.55,width=0.655,height=0.225) +  draw_plot(p3,x=0.005,y=0.325,width=0.645,height=0.225)+  draw_plot(p4,x=0.001,y=0.0,width=0.6495,height=0.325) + draw_plot_label(label=c("a", "b","c","d"),x=c(0.0,0,0,0),c(1, 0.79,0.54,0.33),size = 22) +draw_plot(h1,x=0.639,y=0.775,width=0.22,height=0.231) +  draw_plot(h2,x=.6375,y=0.55,width=0.22,height=0.225) +  draw_plot(h3,x=.635,y=0.325,width=0.22,height=0.225) +
+  draw_plot(h4,x=.636,y=0.075,width=0.22,height=0.25) + draw_plot(col_legend,x=0.85,y=0.2,width=0.1,height=0.6) + draw_text("*",size=35,x=0.455,y=0.9) + draw_text("*",size=35,x=0.455,y=0.43)
+
+ggsave(global_plot,filename="Figures/Figure_2.png",width=14,height=12,dpi=320)
+
+```
+
+#Make Figure 3
+```{r}
+# Correlation plot for ED50
+median1=median((pheno_data %>% subset(Site.name!="St Crispin") %>% subset(Trait=="FvFm" & Metric=="ED50"))$Value)
+median2=median((pheno_data %>% subset(Site.name!="St Crispin") %>% subset(Trait=="NDVI" & Metric=="ED50"))$Value)
+
+ed50_cor=pheno_data %>% subset(Site.name!="St Crispin") %>% mutate(Trait_Metric=paste0(Trait,"_",Metric)) %>% dplyr::select(Site.name,Genotype,Trait_Metric,Value) %>% pivot_wider(names_from = Trait_Metric,values_from=Value) %>% ggplot(aes(x=FvFm_ED50,y=NDVI_ED50))+ geom_point(colour="grey",size=3,alpha=0.8) + stat_cor(method="spearman",label.x.npc="left",color="black",size=7,r.digits=1,p.digits=3,cor.coef.name = "rho") +
+  geom_smooth(method='lm', formula= y~x,size=1.5,colour="black") + theme_classic()+ labs(x="Fv/Fm ED50 (\u00B0C)",y="NDVI ED50 (\u00B0C)")+ theme(plot.background = element_blank(),rect = element_rect(fill = "transparent",colour="transparent"),axis.text.x=element_text(size=15,color="black"),axis.text.y=element_text(size=15,color="black"),axis.title.x = element_text(size=15,color="black"),axis.title.y = element_text(size=15,color="black"),legend.title = element_text(size=15,color="black"),legend.text = element_text(size=15,color="black"),legend.position = "none",legend.background = element_rect(fill = "transparent"),
+          panel.background = element_rect(colour = "black", size=1.5))+ guides(colour = guide_legend(override.aes = list(size=3))) + geom_vline(xintercept=median1,size=1,linetype="dashed") + geom_hline(yintercept=median2,size=1,linetype="dashed")
+
+median11=median((pheno_data %>% subset(Site.name!="St Crispin") %>% subset(Trait=="FvFm" & Metric=="Ratio"))$Value)
+median21=median((pheno_data %>% subset(Site.name!="St Crispin") %>% subset(Trait=="NDVI" & Metric=="Ratio"))$Value)
+
+# Correlation plot for Ratios
+ratio_cor=pheno_data %>% subset(Site.name!="St Crispin") %>% mutate(Trait_Metric=paste0(Trait,"_",Metric)) %>% dplyr::select(Site.name,Genotype,Trait_Metric,Value) %>% pivot_wider(names_from = Trait_Metric,values_from=Value)  %>% ggplot(aes(x=FvFm_Ratio,y=NDVI_Ratio))+ geom_point(colour="grey",size=3,alpha=0.8) + 
+  geom_smooth(method='lm', formula= y~x,size=1.5,colour="black")+ stat_cor(method="spearman",label.x.npc="left",color="black",size=7,digits=3,cor.coef.name = "rho",aes(label = paste(..r.label..,
+                      if_else(readr::parse_number(..p.label..) < 0.001, 
+                              paste0("italic('p')~'< 0.001'"), ..p.label..), sep = "~`,   `~")))  + theme_classic()+ labs(x="Fv/Fm +9\u00B0C/MMM",y="NDVI +9\u00B0C/MMM")+ theme(plot.background = element_blank(),rect = element_rect(fill = "transparent",colour="transparent"),axis.text.x=element_text(size=15,color="black"),axis.text.y=element_text(size=15,color="black"),axis.title.x = element_text(size=15,color="black"),axis.title.y = element_text(size=15,color="black"),legend.title = element_text(size=15,color="black"),legend.text = element_text(size=15,color="black"),legend.position = "none",legend.background = element_rect(fill = "transparent"),
+          panel.background = element_rect(colour = "black", size=1.5))+ guides(colour = guide_legend(override.aes = list(size=3))) + geom_vline(xintercept=median11,size=1,linetype="dashed") + geom_hline(yintercept=median21,size=1,linetype="dashed")
+
+
+
+#Colour individuals by quartile 
+tol_colors=c("#1ba3c6","#e03426","#f8b620","#F77C10")
+names(tol_colors)=c("sensitive","tolerant","unclassified","mid")
+
+segment_data=data.frame(xstart=Both.sites$Lon,xend=modif_pos$Lon_adj,ystart=Both.sites$Lat,yend=modif_pos$Lat_adj)
+
+#Retrieve australia polygons from GDAM dataset
+australia_border<-raster::getData("GADM",country="AUS",level=0)
+
+#Unep reefs shapefile
+unep_reef_crop<-sf::st_read(paste0(path,"Data/Env_data/14_001_WCMC008_CoralReefs2018_v4_1/Custom_data/unep_reefs_cropped.shp"))
+
+
+aus_map=ggplotGrob(ggplot()+theme(axis.text.x=element_blank(),axis.text.y=element_blank(),axis.title.x = element_blank(),axis.title.y = element_blank(),axis.ticks.x=element_blank(),axis.ticks.y=element_blank(),panel.border = element_rect(colour = "transparent", fill=NA, size=2),plot.margin = unit(c(0, 0, 0, 0), "null"),panel.margin = unit(c(0, 0, 0, 0), "null"),panel.background = element_rect(fill ="transparent"),plot.background = element_rect(fill = "transparent", colour = NA),
+  panel.grid.major = element_blank(),
+  panel.grid.minor = element_blank())  + geom_polygon(data=australia_border, aes(long,lat,group=group),fill="black",colour="black") + geom_rect(aes(xmin=144,xmax=154,ymin=-25,ymax=-12),color="red",fill="transparent",size=1.5) + coord_fixed(ratio=1,ylim=c(-45,-8)) )
+
+
+
+#Heat tolerance map for Fv/Fm
+tolerant_classi_fvfm=pheno_data %>% subset(Site.name!="St Crispin") %>% mutate(Trait_Metric=paste0(Trait,"_",Metric)) %>% dplyr::select(Site.name,Genotype,Trait_Metric,Value) %>% pivot_wider(names_from = Trait_Metric,values_from=Value) %>% mutate(q1_fvfm=quantile(FvFm_ED50,probs=c(.25,.5, .75),na.rm=T)[1],q2_fvfm=quantile(FvFm_ED50,probs=c(.25,.5, .75),na.rm=T)[2],q3_fvfm=quantile(FvFm_ED50,probs=c(.25,.5, .75),na.rm=T)[3],q1_ndvi=quantile(NDVI_ED50,probs=c(.25,.5, .75),na.rm=T)[1],q2_ndvi=quantile(NDVI_ED50,probs=c(.25,.5, .75),na.rm=T)[2],q3_ndvi=quantile(NDVI_ED50,probs=c(.25,.5, .75),na.rm=T)[3]) %>% mutate(Tol_cat=if_else(FvFm_ED50<q1_fvfm,"sensitive",if_else(FvFm_ED50>q1_fvfm & FvFm_ED50<q2_fvfm,"unclassified",if_else(FvFm_ED50>q3_fvfm,"tolerant","mid")))) %>% subset(!is.na(Tol_cat))
+
+
+radius=pheno_data %>% subset(Site.name!="St Crispin") %>% mutate(Trait_Metric=paste0(Trait,"_",Metric)) %>% dplyr::select(Site.name,Genotype,Trait_Metric,Value) %>% pivot_wider(names_from = Trait_Metric,values_from=Value) %>% group_by(Site.name) %>% dplyr::summarise(mRatio=mean(FvFm_Ratio,na.rm=T))
+Both.sites$mRatio=radius$mRatio
+modif_pos$mRatio=radius$mRatio
+
+perc_genotype=tolerant_classi_fvfm %>% group_by(Site.name) %>% dplyr::summarize(p1=mean(Tol_cat=="sensitive"),p2=mean(Tol_cat=="unclassified"),p3=mean(Tol_cat=="tolerant"),p4=mean(Tol_cat=="mid"))
+perc_genotype=perc_genotype %>% merge(modif_pos,by="Site.name")
+perc_genotype$mRatio=radius$mRatio
+perc_genotype$radius=1*perc_genotype$mRatio
+
+
+
+
+
+tol_colors=c("#1ba3c6","#f8b620","#F77C10","#e03426")
+names(tol_colors)=c("p1","p2","p4","p3")
+
+
+summary_map<-ggplot() + geom_polygon(data=australia_border, aes(long,lat,group=group),fill="#D3D3D3",colour="black") + geom_sf(data = unep_reef_crop['LAYER_NAME'],fill="grey") + coord_equal()+ coord_sf(xlim=c(144,155),ylim=c(-25,-12),expand=F)+ theme(legend.position=c(0.84,0.47),panel.border = element_rect(colour = "black", fill=NA, size=2),panel.background = element_rect(fill ="transparent"),panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),axis.text.x = element_text(size=15,color="black"),axis.text.y=element_text(size=15,color="black"),axis.title.x = element_text(size=20,color="black"),axis.title.y = element_text(size=20,color="black"),legend.title=element_text(size=20),legend.text=element_text(size=15),plot.margin=margin(t = 10, r = 5, b = 5, l = 5, unit = "pt")) + geom_point(data=Both.sites,aes(x=Lon,y=Lat),fill="#a9a9a9",size=4,shape=21, color="black")+ geom_segment(data=segment_data,aes(x=xstart,xend=xend,y=ystart,yend=yend),size=1,colour="black")+ new_scale_fill()+geom_scatterpie(data=perc_genotype,aes(x=Lon_adj,y=Lat_adj,r=radius),cols=c("p1","p2","p3","p4"),colour=NA)+scale_fill_manual(values=rev(tol_colors),breaks=c("p3","p4","p2","p1"),labels=c("High","","","Low"),name="ED50 \u00B0C") +
+   geom_scatterpie_legend((perc_genotype$radius),153,-16.2 ,n=2, 
+                          labeller= function(x) x=round(x,1))+ labs(x="",y="") + annotation_north_arrow(location = "tr", which_north = "true", pad_x = unit(0.25, "in"), pad_y = unit(0.5, "in"), style = north_arrow_fancy_orienteering)+ggsn::scalebar(x.min=145,x.max=149,y.min=-24.5,y.max=-23.5,location = "bottomright", dist = 200,dist_unit = "km", transform = TRUE,  model = "WGS84",height=0.2,st.bottom=T,st.dist=0.2,st.size=4) + geom_text(aes(x=153.1,y=-15,label="+9\u00B0C/MMM"),size=7) + theme(legend.key.size = unit(0.7, 'cm'),
+    legend.box.background = element_rect(fill = "transparent", colour = "transparent"),
+    legend.key = element_rect(fill = "transparent", colour = "transparent"))+ geom_text(aes(x=149,y=-13,label="Fv/Fm"),size=8)
+
+full_map<-summary_map+annotation_custom(grob=aus_map,xmin=145,xmax=149,ymin=-24.5,ymax=-20.5)
+
+#Heat tolerance map for NDVI
+tolerant_classi_ndvi=pheno_data %>% subset(Site.name!="St Crispin") %>% mutate(Trait_Metric=paste0(Trait,"_",Metric)) %>% dplyr::select(Site.name,Genotype,Trait_Metric,Value) %>% pivot_wider(names_from = Trait_Metric,values_from=Value) %>% mutate(q1_fvfm=quantile(FvFm_ED50,probs=c(.25,.5, .75),na.rm=T)[1],q2_fvfm=quantile(FvFm_ED50,probs=c(.25,.5, .75),na.rm=T)[2],q3_fvfm=quantile(FvFm_ED50,probs=c(.25,.5, .75),na.rm=T)[3],q1_ndvi=quantile(NDVI_ED50,probs=c(.25,.5, .75),na.rm=T)[1],q2_ndvi=quantile(NDVI_ED50,probs=c(.25,.5, .75),na.rm=T)[2],q3_ndvi=quantile(NDVI_ED50,probs=c(.25,.5, .75),na.rm=T)[3]) %>% mutate(Tol_cat=if_else(NDVI_ED50<q1_ndvi,"sensitive",if_else(NDVI_ED50>q1_ndvi & NDVI_ED50<q2_ndvi,"unclassified",if_else(NDVI_ED50>q3_ndvi,"tolerant","mid")))) %>% subset(!is.na(Tol_cat))
+
+
+radius=pheno_data %>% subset(Site.name!="St Crispin") %>% mutate(Trait_Metric=paste0(Trait,"_",Metric)) %>% dplyr::select(Site.name,Genotype,Trait_Metric,Value) %>% pivot_wider(names_from = Trait_Metric,values_from=Value) %>% group_by(Site.name) %>% dplyr::summarise(mRatio=mean(NDVI_Ratio,na.rm=T))
+Both.sites$mRatio=radius$mRatio
+modif_pos$mRatio=radius$mRatio
+
+perc_genotype=tolerant_classi_ndvi %>% group_by(Site.name) %>% dplyr::summarize(p1=mean(Tol_cat=="sensitive"),p2=mean(Tol_cat=="unclassified"),p3=mean(Tol_cat=="tolerant"),p4=mean(Tol_cat=="mid"))
+perc_genotype=perc_genotype %>% merge(modif_pos,by="Site.name")
+perc_genotype$mRatio=radius$mRatio
+perc_genotype$radius=0.5*sqrt(log(10*perc_genotype$mRatio))
+
+tol_colors=c("#1ba3c6","#f8b620","#F77C10","#e03426")
+names(tol_colors)=c("p1","p2","p4","p3")
+
+
+summary_map2<-ggplot() + geom_polygon(data=australia_border, aes(long,lat,group=group),fill="#D3D3D3",colour="black") + geom_sf(data = unep_reef_crop['LAYER_NAME'],fill="grey") + coord_equal()+ coord_sf(xlim=c(144,155),ylim=c(-25,-12),expand=F)+ theme(legend.position=c(0.84,0.47),panel.border = element_rect(colour = "black", fill=NA, size=2),panel.background = element_rect(fill ="transparent"),panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),axis.text.x = element_text(size=15,color="black"),axis.text.y=element_text(size=15,color="black"),axis.title.x = element_text(size=20,color="black"),axis.title.y = element_text(size=20,color="black"),legend.title=element_text(size=20),legend.text=element_text(size=15),plot.margin=margin(t = 10, r = 5, b = 5, l = 5, unit = "pt")) + geom_point(data=Both.sites,aes(x=Lon,y=Lat),fill="#a9a9a9",size=4,shape=21, color="black")+ geom_segment(data=segment_data,aes(x=xstart,xend=xend,y=ystart,yend=yend),size=1,colour="black")+ new_scale_fill()+geom_scatterpie(data=perc_genotype,aes(x=Lon_adj,y=Lat_adj,r=radius),cols=c("p1","p2","p3","p4"),colour=NA)+scale_fill_manual(values=rev(tol_colors),breaks=c("p3","p4","p2","p1"),labels=c("High","","","Low"),name="ED50 \u00B0C") +
+   geom_scatterpie_legend((perc_genotype$radius),153,-16.2 ,n=3, 
+                          labeller= function(x) x=round(exp((x/0.5)^2)/10,1))+ labs(x="",y="") + annotation_north_arrow(location = "tr", which_north = "true", pad_x = unit(0.25, "in"), pad_y = unit(0.5, "in"), style = north_arrow_fancy_orienteering)+ggsn::scalebar(x.min=145,x.max=149,y.min=-24.5,y.max=-23.5,location = "bottomright", dist = 200,dist_unit = "km", transform = TRUE,  model = "WGS84",height=0.2,st.bottom=T,st.dist=0.2,st.size=4) + geom_text(aes(x=153.1,y=-15,label="+9\u00B0C/MMM"),size=7) + theme(legend.key.size = unit(0.7, 'cm'),
+    legend.box.background = element_rect(fill = "transparent", colour = "transparent"),
+    legend.key = element_rect(fill = "transparent", colour = "transparent"))+ geom_text(aes(x=149,y=-13,label="NDVI"),size=8)
+
+full_map2<-summary_map2+annotation_custom(grob=aus_map,xmin=145,xmax=149,ymin=-24.5,ymax=-20.5)
+
+global_plot=ggdraw() +draw_plot(full_map,x=0,y=0.3,width=0.5,height=0.7)+  draw_plot(ed50_cor,x=0.055,y=0,width=0.41,height=0.3) +  draw_plot(ratio_cor,x=0.485,y=0.0,width=0.42,height=0.3) +draw_plot(full_map2,x=0.44,y=0.3,width=0.5,height=0.7)+ draw_plot_label(label=c("a", "b","c","d"),x=c(0.03,0.47,0.07,0.51),c(1, 1,0.32,0.32),size = 25)
+
+ggsave(global_plot,filename="Figures/Figure_3.png",width=14,height=10,dpi=400)
+```
+
+#Make supplementary Figure 4
+```{r}
+adj_density_plot1=ed50_adj %>% ggplot(aes(ed50.fvfm_adj)) +
+  geom_density(aes(y = ..count.. * 0.05),size=1,alpha=0.6,fill="#D3D3D3") +
+  theme_linedraw()  + theme(axis.text.x=element_text(size=20,color="black"),axis.text.y=element_text(size=20,color="black"),axis.title.x = element_text(size=20,color="black"),axis.title.y = element_text(size=20,color="black"),legend.title = element_text(size=20,color="black"),legend.text = element_text(size=20,color="black"),legend.position = "right",legend.background = element_rect(fill = "transparent"),
+          panel.background = element_rect(colour = "black", size=1.5)) +
+  labs(x = "Fv/Fm ED50.adj (°C)", y = "Number of colonies") +
+  geom_vline(xintercept = mean((pheno_data %>% subset(Trait=="FvFm" & Metric=="ED50"))$Value),size=1) + annotate("text",x=mean((pheno_data %>% subset(Trait=="FvFm" & Metric=="ED50"))$Value)-0.4,y=c(24),size=5,label=as.character(round(mean((pheno_data %>% subset(Trait=="FvFm" & Metric=="ED50"))$Value),2))) + scale_x_continuous(breaks = seq(35,40,by=1),
+                     limits = c(35,40)) +
+  annotate("text", x = c(35), 
+           y = c(15), 
+           adj = 0, label = paste0("5%-95%\nrange = ", round(quantile(res.fvfm$ed50.fvfm_adj,probs=c(.05,.5, .95))[3]-quantile(res.fvfm$ed50.fvfm_adj,probs=c(.05,.5, .95))[1], 2)), size = 5)
+
+adj_density_plot2=ed50_adj %>% ggplot(aes(ed50.ndvi_adj)) +
+  geom_density(aes(y = ..count.. * 0.05),size=1,alpha=0.6,fill="#D3D3D3") +
+  theme_linedraw()  + theme(axis.text.x=element_text(size=20,color="black"),axis.text.y=element_text(size=20,color="black"),axis.title.x = element_text(size=20,color="black"),axis.title.y = element_text(size=20,color="black"),legend.title = element_text(size=20,color="black"),legend.text = element_text(size=20,color="black"),legend.position = "right",legend.background = element_rect(fill = "transparent"),
+          panel.background = element_rect(colour = "black", size=1.5)) +
+  labs(x = "NDVI ED50.adj (°C)", y = "Number of colonies") +
+  geom_vline(xintercept = mean((pheno_data %>% subset(Trait=="NDVI" & Metric=="ED50"))$Value),size=1) + annotate("text",x=mean((pheno_data %>% subset(Trait=="NDVI" & Metric=="ED50"))$Value)-0.4,y=c(24),size=5,label=as.character(round(mean((pheno_data %>% subset(Trait=="NDVI" & Metric=="ED50"))$Value),2))) + scale_x_continuous(breaks = seq(34,39,by=1),
+                     limits = c(34,39)) +
+  annotate("text", x = c(34), 
+           y = c(15), 
+           adj = 0, label = paste0("5%-95%\nrange = ", round(quantile(res.ndvi$ed50.ndvi_adj,probs=c(.05,.5, .95))[3]-quantile(res.ndvi$ed50.ndvi_adj,probs=c(.05,.5, .95))[1], 2)), size = 5)
+
+all_plots=ggdraw() +draw_plot(adj_density_plot1,x=0.0,y=0.0,width=0.5,height=1)+  draw_plot(adj_density_plot2,x=0.50,y=0.0,width=0.5,height=1) + draw_plot_label(label=c("a", "b"),x=c(0.0,0.5),c(1, 1),size = 22)
+
+ggsave(all_plots,filename="Figures/Supplementary_Fig4.png",width=12,height=6,dpi=320)
+```
+
+
+3/ Metrics and summary to be provided in publication and supplementary info
+
+#Summarize phenotypic measurements distribution
+```{r}
+#Summarize ED50F
+pheno_data %>% subset(Trait=="FvFm" & Metric=="ED50" & Site.name!="St Crispin") %>%
+  dplyr::summarise(mean = mean(Value), sd = sd(Value), n = n(),lower=Rmisc::CI(Value, ci=0.95)[3],upper=Rmisc::CI(Value, ci=0.95)[1],q1=quantile(Value)[2],q3=quantile(Value)[4],median=median(Value),IQ=q3-q1,min=q1-1.5*IQ,max=q3+1.5*IQ)
+
+#Summarize relative ED50F
+pheno_data %>% subset(Trait=="FvFm" & Metric=="ED50" & Site.name!="St Crispin") %>% merge(sites_data %>% dplyr::select(Site.name,MMM),by="Site.name") %>% mutate(Value= Value-MMM) %>%dplyr::summarise(mean = mean(Value), sd = sd(Value), n = n(),lower=Rmisc::CI(Value, ci=0.95)[3],upper=Rmisc::CI(Value, ci=0.95)[1],q1=quantile(Value)[2],q3=quantile(Value)[4],median=median(Value),IQ=q3-q1,min=q1-1.5*IQ,max=q3+1.5*IQ)
+
+#Average size of confidence intervals 
+pheno_data %>% group_by(Site.name,Trait,Metric) %>% dplyr::summarise(mCI=mean(CI),sdCI=sd(CI))
+```
+
+
+#Make table 1
+```{r}
+comp_sp=xlsx::read.xlsx(paste0(path,"Results/GBR_ED50/Comparison_acroprora_ed50_other_studies.xlsx"),sheetName="Feuil1",header=T,check.names=F)
+comp_sp$Species[4]="Acropora hyacinthus" 
+
+
+colnames(comp_sp)[3]="Measurement<br/>season"
+colnames(comp_sp)[6]="Relative ED50 (°C)<br/>to local MMM"
+colnames(comp_sp)[7]=" Water flow<br/>turnover (h)"
+colnames(comp_sp)[8]="Irradiance<br/>(µmol photons<br/>m-2 s-1)"
+colnames(comp_sp)[9]="Time<br/>of PAM<br/>measure"
+# comp_sp$`Time<br/>of measurement`=str_replace(comp_sp$`Time<br/>of measurement`,pattern=",",replacement = ",<br/>")
+colnames(comp_sp)[10]="DHW at time<br/>of collection"
+
+#Replace short to medium - 
+
+comp_sp[is.na(comp_sp)]="NA*"
+
+library(kableExtra)
+comp_sp %>%
+  kbl(escape=F) %>%
+  kable_classic(full_width = F, html_font = "Cambria") %>% column_spec(1,italic=T) %>% row_spec(0,bold=T) %>%
+  kable_styling(latex_options="scale_down")  %>% save_kable(paste0(path,"Figures/GBR_Pheno_Variation/Cross_species_comparison2.png"),zoom = 2,density=500) 
+```
+
+
+#Make Supplementary Table 5a
+```{r}
+Site.stats.ed50 <- FvFm_ed50 %>%
+  group_by(Site.name) %>%
+  dplyr::summarise(mean = mean(ED50), sd = sd(ED50), n = n(),lower=Rmisc::CI(ED50, ci=0.95)[3],upper=Rmisc::CI(ED50, ci=0.95)[1],q1=quantile(ED50)[2],q3=quantile(ED50)[4],median=median(ED50),IQ=q3-q1,min=q1-1.5*IQ,max=q3+1.5*IQ) %>%
+  ungroup() %>% mutate(Trait="Fv/Fm",Metric="ED50")
+
+Site.stats.ratio <- FvFm_ratio %>%
+  group_by(Site.name) %>%
+  dplyr::summarise(mean = mean(Ratio_FvFm.adj), sd = sd(Ratio_FvFm.adj), n = n(),lower=Rmisc::CI(Ratio_FvFm.adj, ci=0.95)[3],upper=Rmisc::CI(Ratio_FvFm.adj, ci=0.95)[1],q1=quantile(Ratio_FvFm.adj)[2],q3=quantile(Ratio_FvFm.adj)[4],median=median(Ratio_FvFm.adj),IQ=q3-q1,min=q1-1.5*IQ,max=q3+1.5*IQ) %>%
+  ungroup() %>% mutate(Trait="Fv/Fm",Metric="Ratio")
+
+Site.stats.ed50.2 <- Hyperspec_ed50 %>%
+  group_by(Site.name) %>%
+  dplyr::summarise(mean = mean(ED50), sd = sd(ED50), n = n(),lower=Rmisc::CI(ED50, ci=0.95)[3],upper=Rmisc::CI(ED50, ci=0.95)[1],q1=quantile(ED50)[2],q3=quantile(ED50)[4],median=median(ED50),IQ=q3-q1,min=q1-1.5*IQ,max=q3+1.5*IQ) %>%
+  ungroup() %>% mutate(Trait="NDVI",Metric="ED50")
+
+Site.stats.ratio.2 <- Hyperspec_ratio %>%
+  group_by(Site.name) %>%
+  dplyr::summarise(mean = mean(Ratio_NDVI.adj), sd = sd(Ratio_NDVI.adj), n = n(),lower=Rmisc::CI(Ratio_NDVI.adj, ci=0.95)[3],upper=Rmisc::CI(Ratio_NDVI.adj, ci=0.95)[1],q1=quantile(Ratio_NDVI.adj)[2],q3=quantile(Ratio_NDVI.adj)[4],median=median(Ratio_NDVI.adj),IQ=q3-q1,min=q1-1.5*IQ,max=q3+1.5*IQ) %>%
+  ungroup() %>% mutate(Trait="NDVI",Metric="Ratio")
+
+pheno_sum=rbind(Site.stats.ed50,Site.stats.ratio,Site.stats.ed50.2,Site.stats.ratio.2)
+
+write.csv(pheno_sum,"D:/Hugo/Results/Phenotypic_traits_site_summary.csv",row.names=F)
+```
+
+#Global stats
+```{r}
+#Global summary across all sites
+pheno_data %>% group_by(Trait,Metric) %>% dplyr::summarise(mean=mean(Value),sd=sd(Value),median=median(Value),cv=100*sd/mean,min=min(Value),max=max(Value))
+
+sum=pheno_data %>% group_by(Trait,Metric,Site.name) %>% dplyr::summarise(mean=mean(Value),sd=sd(Value),cv=100*sd/mean)
+
+#Subset of summary 
+100*(1-sum$mean[sum$Metric=="Ratio" & sum$Trait=="FvFm" & !sum$Site.name %in% c("Heron","Lady Musgrave","Fitzroy Reef")]/sum$mean[sum$Metric=="Ratio" & sum$Trait=="FvFm" & sum$Site.name=="Heron"])
+
+100*(1-sum$mean[sum$Metric=="Ratio" & sum$Trait=="FvFm" & !sum$Site.name %in% c("Heron","Lady Musgrave","Fitzroy Reef")]/sum$mean[sum$Metric=="Ratio" & sum$Trait=="FvFm" & sum$Site.name=="Lady Musgrave"])
+
+100*(1-sum$mean[sum$Metric=="Ratio" & sum$Trait=="FvFm" & !sum$Site.name %in% c("Heron","Lady Musgrave","Fitzroy Reef")]/sum$mean[sum$Metric=="Ratio" & sum$Trait=="FvFm" & sum$Site.name=="Fitzroy Reef"])
+```
+
+#Additional site statistics
+```{r}
+# Percentage of Variance explained by site
+omega.squared <- function(WelchF, df, N) df * (WelchF - 1) / (df * (WelchF - 1) + N)
+
+a<-tibble(omega.squared = omega.squared(
+  WelchF = welch$statistic[[1]], df = welch$parameter[[1]], N = nrow(df_ed50_clean)))
+
+#Median pairwise difference between Sites
+mpwdiff <- median(dist(Site.stats.ratio$mean))
+mpwdiff %>%
+  knitr::kable(caption = "Median pairwise difference between nurseries (°C)")
+
+#Pairwise comparisons after exclusion of St Crispin
+mpwdiff <- median(dist(Site.stats$mean[Site.stats$Site.name!="St Crispin"]))
+mpwdiff %>%
+  knitr::kable(caption = "Median pairwise difference between nurseries (°C)")
+```
