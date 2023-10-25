@@ -51,7 +51,7 @@ mycolors<-c("#1ba3c6" ,"#2cb5c0" ,"#21B087", "#33a65c" ,"#a2b627" ,"#f8b620", "#
 ```{r}
 colony_env=colony_env %>% column_to_rownames(var="Genotype")
 
-cor=cor(colony_env_sub,method="pearson")
+cor=cor(colony_env,method="pearson")
 
 png(height=465, width=465, file=paste0(path,"Hugo/Figures/Env_analysis/Env_var_correlations_reduced_v8.png"),res=300,units='mm')
 corrplot::corrplot(cor, order = 'hclust', addrect = 5,col = COL2('RdYlBu', 10),cl.pos = 'b',tl.cex=2,cl.cex = 2,tl.col='black')
@@ -72,19 +72,16 @@ for(i in 1:nrow(cor)){
   }
 }
 print(pw_cor)
-write.csv(pw_cor,paste0(path,"/Hugo/Data/GBR_env_data/Pairwise_correlations_v5_0.7.csv"),row.names=F)
+write.csv(pw_cor,paste0(path,"Hugo/Data/GBR_env_data/Pairwise_correlations_v5_0.7.csv"),row.names=F)
 
 #List of correlated variables to remove from pairwise correlations
 redundant=c("LMM","OM","OMsd","MMM","CF_OM","CF_ss","Chl_a_OM","DHW_freq_sup8","DHW_max","Oxygen_OM","DHW_freq_sup4_6year","Tot_N_OM","PIP_OM")
 
 colony_env_uncor=colony_env %>% dplyr::select(-all_of(redundant))
 
-cor_uncor=cor(colony_env_uncor)
-write.csv(cor_uncor,paste0(path,"Hugo/Data/GBR_env_data/ECT1_Aspat_colonies_environmental_data_inf_0.7_correlation_matrix.csv"),row.names=F)
-
 #%ake table of uncorrelated variables to use in random forest 
-colony_env_sub_uncor$Genotype=rownames(colony_env_sub_uncor)
-write.csv(colony_env_sub_uncor,paste0(path,"Hugo/Data/GBR_env_data/ECT1_Aspat_colonies_environmental_data_uncor_v3_0.7.csv"),row.names=F)
+colony_env_uncor$Genotype=rownames(colony_env_uncor)
+write.csv(colony_env_uncor,paste0(path,"Hugo/Data/GBR_env_data/ECT1_Aspat_colonies_environmental_data_uncor_v3_0.7.csv"),row.names=F)
 
 #Make supplementary table 9a
 colony_env_sub_uncor=colony_env_sub_uncor %>% dplyr::select(-Genotype)
