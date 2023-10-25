@@ -6,7 +6,7 @@
 heattol_boxplot=function(df,Metric,Metric_lab,text_size,breaks_min,breaks_max,ymin,ymax,breaks_gap,xlab,xtitlelab,xticks){
   path="/data1/Denis/Hugo/"
   sites_data=read.csv(paste0(path,"Data/GBR_env_data/sites_data_ECT1.csv"),header=T,sep=";")
-  
+  colnames(sites_data)[1]="Reef.Name"
   # sites_data=read.csv(paste0(path,"Data/GBR_env_data/Aspath_sites_data.csv"))
   sites_data=sites_data %>% subset(Reef.Name %in% unique(df$Site.name))
   
@@ -62,7 +62,7 @@ heattol_histo=function(df,text_size,breaks_min,breaks_max,breaks_gap,xlab,xtitle
   
   path="/data1/Denis/Hugo/"
   sites_data=read.csv(paste0(path,"Data/GBR_env_data/sites_data_ECT1.csv"),header=T,sep=";")
-  
+  colnames(sites_data)[1]="Reef.Name"
   sites_data=sites_data %>% subset(Reef.Name %in% unique(df$Site.name))
   
   
@@ -96,7 +96,7 @@ heattol_histo=function(df,text_size,breaks_min,breaks_max,breaks_gap,xlab,xtitle
     #                  yend = dnorm(mean + sd, mean, sd) * f2),
     #              arrow = arrow(length = unit(0.4,"cm"), ends = "both"), lwd = 1,size=1)+
     annotate("text", x = mean +vm, y = 82, adj = 1,
-             label = paste0("median = ", round(median, 2),"±",round(sd, 2)), size = 5)  + coord_flip()
+             label = paste0("median = ", round(median, 2),"??",round(sd, 2)), size = 5)  + coord_flip()
   
   # +
   #   annotate("text", x = mean -hm,
