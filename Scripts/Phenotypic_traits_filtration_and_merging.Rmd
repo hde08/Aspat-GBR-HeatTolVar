@@ -1,0 +1,62 @@
+---
+title: "Phenotypic_data_filtration"
+author: "Hugo DENIS"
+date: "2023-10-25"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Import individual trait and metric files  
+```{r}
+sites_data=read.csv(paste0(path,"/Data/GBR_env_data/GBR_Aspat_sites_data.csv"),header=T)
+
+
+FvFm_ratio=read.csv(paste0(path,"/Data/GBR_PAM/FvFm_ratios_adjusted.csv"),header=T)
+FvFm_ratio$Ratio_FvFm.adj=FvFm_ratio$Ratio_FvFm.adj2
+
+
+
+FvFm_ed50=read.csv(paste0(path,"Data/GBR_PAM/FvFm_ED50s_drc_withqc.csv"),header=T)
+
+Hyperspec_ed50=read.csv(paste0(path,"Results/GBR_ED50/EDs_Hyperspec_W2.3.csv"),header=T)
+Hyperspec_ed50$CI=Hyperspec_ed50$Upper-Hyperspec_ed50$Lower
+
+Hyperspec_ratio=read.csv(paste0(path,"Data/GBR_Hyperspec/NDVI_ratios_adjusted.csv"),header=T)
+Hyperspec_ratio$Ratio_NDVI.adj=Hyperspec_ratio$Ratio_NDVI.adj2
+```
+
+#Filtration of ratios
+#See supplementary materials  
+```{r}
+FvFm_ratio=FvFm_ratio %>% subset(Ratio_FvFm.adj2<0.9)
+Hyperspec_ratio=Hyperspec_ratio %>% subset(Ratio_NDVI.adj2<0.9)
+```
+
+
+#Filtration of ED50 values 
+#See supplementary materials 
+```{r}
+#Find outliers based on distance to quantiles
+#And discard the individuals that among them have large confidence intervals 
+ FvFm_ed50_stat= FvFm_ed50 %>%
+  dplyr::summarise(mean = mean(ED50), sd = sd(ED50), n = n(),lower=Rmisc::CI(ED50, ci=0.95)[3],upper=Rmisc::CI(ED50, ci=0.95)[1],q1=quantile(ED50)[2],q3=quantile(ED50)[4],median=median(ED50),IQ=q3-q1,min=q1-1.5*IQ,max=q3+1.5*IQ)
+FvFm_outliers= FvFm_ed50 %>% subset(ED50< FvFm_ed50_stat$q1-1.5*FvFm_ed50_stat$IQ | ED50>FvFm_ed50_stat$q3+1.5*FvFm_ed50_stat$IQ |is.na(CI)) %>% subset(CI>10 | is.na(CI))
+
+NDVI_ed50_stat= Hyperspec_ed50 %>% subset(Metric=="MeanNDVI") %>%dplyr::summarise(mean = mean(ED50), sd = sd(ED50), n = n(),lower=Rmisc::CI(ED50, ci=0.95)[3],upper=Rmisc::CI(ED50, ci=0.95)[1],q1=quantile(ED50)[2],q3=quantile(ED50)[4],median=median(ED50),IQ=q3-q1,min=q1-1.5*IQ,max=q3+1.5*IQ)
+NDVI_outliers= Hyperspec_ed50 %>% subset(Metric=="MeanNDVI") %>% subset(ED50< NDVI_ed50_stat$q1-1.5*NDVI_ed50_stat$IQ | ED50>NDVI_ed50_stat$q3+1.5*NDVI_ed50_stat$IQ |is.na(CI)) %>% subset(CI>10 | is.na(CI))
+
+FvFm_ed50=FvFm_ed50   %>% subset(!Genotype %in%  FvFm_outliers$Genotype)
+Hyperspec_ed50=Hyperspec_ed50 %>% subset(Metric=="MeanNDVI") %>% subset(!Genotype %in%  NDVI_outliers$Genotype)
+```
+
+#Merge all dataframes together 
+```{r}
+pheno_data=rbind(FvFm_ed50 %>% dplyr::select(Site.name,Genotype,Term,ED50,CI) %>% mutate(Trait="FvFm"),Hyperspec_ed50 %>% dplyr::select(Site.name,Genotype,ED50,CI) %>% mutate(Trait="NDVI",Term="ED50"),FvFm_ratio %>% mutate(ED50=Ratio_FvFm.adj,CI=NA) %>% dplyr::select(Site.name,Genotype,ED50,CI) %>% mutate(Trait="FvFm",Term="Ratio"),Hyperspec_ratio %>% mutate(ED50=Ratio_NDVI.adj,CI=NA) %>% dplyr::select(Site.name,Genotype,ED50,CI) %>% mutate(Trait="NDVI",Term="Ratio"))
+colnames(pheno_data)[3:4]=c("Metric","Value")
+
+pheno_data=pheno_data %>% arrange(Trait,Metric,Site.name,Genotype)
+write.csv(pheno_data,paste0(path,"Phenotypic_trait_per_genotype.csv",row.names=F))
+```
