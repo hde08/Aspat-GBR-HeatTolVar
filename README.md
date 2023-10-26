@@ -1,4 +1,4 @@
-Analysis of Acropora spathulata heat tolerance variation and environmental drivers on the GBR.
+#Analysis of Acropora spathulata heat tolerance variation and environmental drivers on the GBR.
 
 **The authors would appreciate being notified if you intend to use these data or analyses in your own work**
 
