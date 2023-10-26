@@ -1,0 +1,354 @@
+---
+title: "ED50s_computation"
+author: "Hugo DENIS"
+date: "2022-10-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Import packages
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(drc)
+library(stringr)
+library(cowplot)
+library(ggpubr)
+library(lme4)
+library(lmerTest)
+library(memisc)
+```
+
+
+#Import FvFm data 
+```{r}
+path="/data1/Denis/Hugo/"
+df_filt_info=read.csv(paste0(path,"Data/GBR_PAM/ECT1_Aspat_FvFm.csv"),header=T)
+
+#Remove fragments with qc value = 3 as unaccurate (See supplementary methods)
+df_filt_info=df_filt_info %>% subset(qc!=3)
+
+#Delete genotypes that don't have at least 2 fragments per treatment 
+Gendelete<-df_filt_info %>% group_by(Site.name,Genotype) %>%  dplyr::summarise(Ntreatment=n_distinct(Treatment)) %>% subset(Ntreatment<4)
+Gendelete<-c(Gendelete$Genotype,(df_filt_info %>% group_by(Site.name,Genotype,Treatment) %>% dplyr::summarise(NFrag=n_distinct(ID)) %>% subset(NFrag<=1))$Genotype)
+df_filt_info=df_filt_info %>% subset(!Genotype %in% Gendelete)
+
+#Average FvFm values by genotypes
+FvFm_avgen<-df_filt_info %>% group_by(Site.name,Genotype,Treatment) %>% dplyr::summarize(mFvFm=mean(mFvFm),sdFvFm=sd(sdFvFm))
+FvFm_avgen$Genotype<-as.factor(FvFm_avgen$Genotype)
+
+#Convert treatment levels to factor 
+df_filt_info$Treatment<-factor(df_filt_info$Treatment,levels=c("MMM","+3C","+6C","+9C"))
+FvFm_avgen$Treatment<-factor(FvFm_avgen$Treatment,levels=c("MMM","+3C","+6C","+9C"))
+```
+
+#Import temperature data and site data 
+ #Contains meanTemp_hold.adj = the average temperature in each tank during the hold period
+ #The values are adjusted to take into account differences in temperature data sources across tanks and sites (probes vs hobbos)
+```{r}
+temp_tanks=read.csv(paste0(path,"/Data/GBR_Heat_stress/Aspat_tanks_temperature_adj.csv"),header=T)
+temp_tanks$Site_Treatment_Tank=paste(temp_tanks$Site.name,temp_tanks$Treatment,temp_tanks$Tank,sep="_")
+
+df_filt_info$Site_Treatment_Tank=paste(df_filt_info$Site.name,df_filt_info$Treatment,df_filt_info$Tank,sep="_")
+df_filt_info=df_filt_info %>% merge(temp_tanks %>% dplyr::select(Site_Treatment_Tank,meanTemp_hold.adj,maxTemp.adj),by="Site_Treatment_Tank")
+
+df_filt_info=df_filt_info %>% arrange(Site.name,Genotype,Treatment)
+
+
+sites_data=read.csv(paste0(path,"/Data/GBR_env_data/GBR_Aspat_sites_data.csv"),header=T)
+```
+
+1/ Preliminary tests on FvFm raw measurements
+
+#Test difference in FvFm measurements across experiments and treatments to check 
+#potential tanks and fragment size effects
+```{r}
+#Add fragment sizes to the dataset 
+frag_sizes=read.csv(paste0(path,"Data/GBR_Hyperspec/Aspat_fragment_sizes.csv"),header=T)
+
+#Append to FvFm data
+#Some missing fragments from hyperspec are removed from the dataset 
+df_filt_info2=df_filt_info %>% merge(frag_sizes %>% dplyr::select(ID,Npixel),by="ID")
+
+#Fit first model using REML as it provides unbiased estimates and use if for backward stepwise selection based on F-tests to compare full and reduced models 
+me=lmer(mFvFm ~ Npixel + Site.name + Treatment +(1|Tank) + (1|Genotype), data = df_filt_info2,REML=T)
+step(me)
+summary(me)
+plot(me)
+qqnorm(resid(me))
+
+#Get confidence intervals
+confint(me,level=0.95,method="boot")
+#The size of fragments was removed from the model 
+
+#Percentage of variation explained by tanks 
+tank_var=100*0.0001077/(0.0001077+0.0008358+0.0057206)
+genotype_var=100*0.0008358/(0.0001077+0.0008358+0.0057206)
+```
+
+
+2/ Computation of ED50 values 
+
+#Fit 3 parameters log-logistic models to each site
+#Using Genotype as curveid to get individual ED50 values
+```{r}
+#Set constraints on parameters
+max_upper=round(max(df_filt_info$mFvFm),1)
+max_lower=0.3
+
+#Genotype Weibull model 
+for(site in unique(df_filt_info$Site.name)){
+  FvFm.genotype.W2.3<-drm(mFvFm~meanTemp_hold.adj, data=df_filt_info %>% subset(Site.name==site), curveid = Genotype, fct=W2.3(names = c('hill', 'max', 'ed50')),upperl=c(NA,max_upper,40),lowerl=c(NA,max_lower,30))
+  saveRDS(FvFm.genotype.W2.3,file=paste0("/home/hugo/Outputs/FvFm/",site,"_W2.3_wconstraint_v2.rds"))
+}
+
+#Site level model 
+for(site in unique(df_filt_info$Site.name)){
+  FvFm.site.W2.3<-drm(mFvFm~meanTemp_hold.adj, data=df_filt_info %>% subset(Site.name==site), fct=W2.3(names = c('hill', 'max', 'ed50')),upperl=c(NA,max_upper,40),lowerl=c(NA,max_lower,30))
+  saveRDS(FvFm.site.W2.3,file=paste0("Outputs/FvFm/",site,"_site_level_wconstraint.rds"))
+}
+```
+
+#Model selection based on AIC 
+#Compare Log-logistic vs Weibull models 
+```{r}
+model_comp=data.frame()
+for(site in unique(df_filt_info$Site.name)){
+  model_geno=readRDS(paste0("/home/hugo/Outputs/FvFm/",site,"_W2.3_wconstraint_v2.rds"))
+  m=data.frame(drc::mselect(model_geno, list(W1.3(), LL.3()), linreg=TRUE, icfct=AIC))
+  m$model=row.names(m)
+  m$Site.name=site
+  row.names(m)=NULL
+  model_comp=rbind(model_comp,m)
+}
+
+write.csv(model_comp,paste0("Outputs/FvFm/","FvFm_Modelcomparison_AIC.csv"),row.names=F)
+
+
+```
+
+#Extract ED values and parameters from each site models 
+```{r}
+
+df_ed=data.frame()
+for(site in unique(df_filt_info$Site.name)){
+  model_W2.3=readRDS(paste0("/home/hugo/Outputs/FvFm/",site,"_W2.3_wconstraint_v2.rds"))
+  ed_W2.3=data.frame(ED(model_W2.3,c(25,50),interval="delta")) %>% mutate(Site.name=site)
+  ed_W2.3$ED=sapply(strsplit(rownames(ed_W2.3),":"),"[[",3)
+  ed_W2.3$Genotype=sapply(strsplit(rownames(ed_W2.3),":"),"[[",2)
+  #Reformat into single dataframe 
+  colnames(ed_W2.3)=c("Estimate","Std.error","Lower","Upper","Site.name","Term","Genotype")
+  ed_W2.3$Term=paste0("ED",ed_W2.3$Term)
+  ed_W2.3$Model="W2.3"
+  df_ed=rbind(df_ed,ed_W2.3)
+}
+
+#Filter out curves for which the max value is too far from the control treatment
+comp_max=merge(FvFm_avgen %>% subset(Treatment=="MMM"),df_param %>% subset(Term=="max" & Model=="W2.3"),by="Genotype")
+gendelete_max=comp_max$Genotype[abs(comp_max$mFvFm-comp_max$Estimate)>0.1]
+
+df_ed=df_ed %>% subset(Term=="ED50" & Model=="W2.3")
+df_ed=df_ed %>% subset(!Genotype %in% gendelete_max )
+colnames(df_ed)[1]="ED50"
+write.csv(df_ed,paste0("/home/hugo/Outputs/FvFm/","EDs_W2.3.csv"))
+
+df_param=data.frame()
+for(site in unique(df_filt_info$Site.name)){
+  model_W2.3=readRDS(paste0("/home/hugo/Outputs/FvFm/",site,"_W2.3_wconstraint_v2.rds"))
+  sum_W2.3=broom::tidy(model_W2.3)
+  
+  #Reformat into single dataframe 
+  colnames(sum_W2.3)=c("Term","Genotype","Estimate","Std.error","Statistic","p.value")
+  sum_W2.3$Term[sum_W2.3$Term=="ed50"]="e"
+  sum_W2.3$Model="W2.3"
+  sum_W2.3$Site.name=site
+  df_param=rbind(df_param,sum_W2.3)
+}
+
+write.csv(df_param,paste0("/home/hugo/Outputs/FvFm/","Parameters_W2.3.csv"))
+```
+
+3/ Computation of performance retention
+
+### Compute relative ratios 
+
+#Re-import unfiltered data 
+```{r}
+df_filt_info=read.csv(paste0(path,"Data/GBR_PAM/ECT1_Aspat_FvFm.csv"),header=T)
+df_filt_info=df_filt_info %>% subset(qc!=3)
+
+#Delete genotypes that don't have at least 2 measurements in MMM or MMM+9
+Gendelete<-df_filt_info %>% group_by(Site.name,Genotype) %>%  dplyr::summarise(N_MMM=sum(Treatment=="MMM"),N_MMM9=sum(Treatment=="+9C")) %>% subset(N_MMM<2 | N_MMM9<2)
+df_filt_info=df_filt_info %>% subset(!Genotype %in% Gendelete$Genotype)
+
+#Average FvFm values by genotypes
+FvFm_avgen<-df_filt_info %>% group_by(Site.name,Genotype,Treatment) %>% dplyr::summarize(mFvFm=mean(mFvFm),sdFvFm=sd(sdFvFm))
+FvFm_avgen$Genotype<-as.factor(FvFm_avgen$Genotype)
+
+FvFm_avgen$Treatment<-factor(FvFm_avgen$Treatment,levels=c("MMM","+3C","+6C","+9C"))
+```
+
+#Compute ratios 
+```{r}
+
+
+FvFm_ratio=FvFm_avgen %>% dplyr::select(c(Site.name,Genotype,Treatment,mFvFm)) %>% tidyr::pivot_wider(names_from = "Treatment",values_from ="mFvFm" ) 
+colnames(FvFm_ratio)[3:6]=c("MMM3","MMM6","MMM9","MMM")
+FvFm_ratio=FvFm_ratio %>% dplyr::mutate(Ratio_FvFm=MMM9/MMM)
+
+Temp_ratio=temp_tanks %>% group_by(Site.name,Treatment) %>% dplyr::summarize(mTemp=mean(meanTemp_hold.adj)) %>% tidyr::pivot_wider(names_from = "Treatment",values_from ="mTemp" ) 
+colnames(Temp_ratio)[2:5]=c("MMM3","MMM6","MMM9","MMM")
+Temp_ratio$MMM_sat=sites_data$MMM
+Temp_ratio$MMM_delta=Temp_ratio$MMM-Temp_ratio$MMM_sat
+Temp_ratio$MMM9_sat=sites_data$MMM+9
+Temp_ratio$MMM9_delta=Temp_ratio$MMM9-Temp_ratio$MMM9_sat
+Temp_ratio=Temp_ratio %>% mutate(Ratio_Temp=(MMM9-MMM)/9)
+
+FvFm_ratio=FvFm_ratio %>% merge(Temp_ratio %>% dplyr::select(Site.name,Ratio_Temp,MMM_delta),by="Site.name") 
+
+FvFm_ratio=FvFm_ratio %>% mutate(Ratio_FvFm.adj=Ratio_FvFm*Ratio_Temp)
+
+#Eliminate effect of difference between MMM and MMM site on the ratio
+FvFm_site=FvFm_ratio %>% group_by(Site.name) %>% dplyr::summarize(mratio=mean(Ratio_FvFm.adj)) 
+FvFm_site$MMM_delta=Temp_ratio$MMM_delta
+FvFm_site$MMM9_delta=Temp_ratio$MMM9_delta
+
+anova=aov(mratio~MMM_delta+MMM9_delta,data=FvFm_site)
+par(mforw=c(2,2))
+plot(anova)
+summary(anova)
+
+#Elminate site effect of MMM_delta by using grand mean + MMM_delta residuals 
+mod <- lm(Ratio_FvFm.adj~MMM_delta,data=FvFm_ratio)
+FvFm_ratio2 <- broom::augment(mod, data = FvFm_ratio) %>%
+  mutate(Ratio_FvFm.adj2 = mean(FvFm_ratio$Ratio_FvFm.adj) + .resid)
+
+write.csv(FvFm_ratio2,"D:/Hugo/Data/GBR_PAM/FvFm_ratios_adjusted.csv",row.names=F)
+```
+
+
+4/ Figures
+
+#Make supplementary Figure 3 
+```{r}
+sites_log_curve=c("Pelorus East","Fitzroy Island","Moore","No Name","Kelso")
+# sites_log_curve=c("Kelso")
+# 
+# pheno_data %>% subset(Site.name %in% sites_log_curve & Metric=="ED50" & Trait=="FvFm") %>% arrange (CI)
+
+  predicted_data=data.frame()
+  colony_stats=data.frame()
+  for(site in sites_log_curve){
+    df=df_filt_info %>% subset(Site.name==site)
+    
+    model_W2.3=readRDS(paste0("D:/Hugo/Results/GBR_ED50/",site,"_W2.3_wconstraint_v2.rds"))
+    
+    newdata=data.frame(conc=rep(seq(min(df$meanTemp_hold.adj),39, length=100),length(colnames(model_W2.3$parmMat))),Genotype=unlist(lapply(colnames(model_W2.3$parmMat), function(x) rep(x,100))))
+    pm <- predict(model_W2.3, newdata=newdata,interval="confidence")
+  
+    # new data with predictions
+    newdata$p <- pm[,1]
+    newdata$pmin <- pm[,2]
+    newdata$pmax <- pm[,3]
+    newdata$Site.name=site
+    predicted_data=rbind(predicted_data,newdata)
+    
+    #Store ED50 value for plotting 
+    ED50<-round(ED(model_W2.3,50,interval="delta")[,1],digits=3)
+    ED50low<-round(ED(model_W2.3,50,interval="delta")[,3],digits=3)
+    ED50high<-round(ED(model_W2.3,50,interval="delta")[,4],digits=3)
+    # new data with predictions
+    newdata$p <- pm[,1]
+    newdata$pmin <- pm[,2]
+    newdata$pmax <- pm[,3]
+    newdata$Site.name=site
+    colony_stats=rbind(colony_stats,data.frame(Genotype=colnames(model_W2.3$parmMat),mean=ED50,lower=ED50low,upper=ED50high))
+  predicted_data=rbind(predicted_data,newdata)
+    
+  }
+  
+  #Select the colonies that we want to plot 
+  full_genotype=(df_filt_info %>% group_by(Site.name,Genotype,Treatment) %>% dplyr::summarise(NFrag=n_distinct(ID)) %>% subset(NFrag==3))$Genotype
+  pheno_data %>% subset(Site.name %in% sites_log_curve & Metric=="ED50" & Trait=="FvFm" & Genotype %in% full_genotype) %>% arrange (CI)
+
+  #Summary of ED50 
+  
+  
+#create color vectors 
+mycolorssub=c("#1ba3c6","#7873c0","#f8b620")
+names(mycolorssub)=c(861,842,829)
+  
+#Make the plog of log-logistic curve 
+colonies=c(861,842,829)
+newdata2=predicted_data %>% subset(Genotype %in% colonies )
+p<-df_filt_info %>% subset(Genotype %in% colonies) %>% ggplot(aes(x = meanTemp_hold.adj, y = mFvFm,colour=Genotype))+ geom_point(size=1,position=position_jitter(width = 0.1),show.legend = F)+ geom_line(data=newdata2, aes(x=conc, y=p,colour=Genotype,show.legend=F),size=1)+ geom_ribbon(data=newdata2, aes(x=conc, y=p, ymin=pmin, ymax=pmax), alpha=0.2, show.legend = FALSE, 
+    linetype = 2)+ theme_linedraw()+labs(x="Temperature (°C)",y="Fv/Fm")+theme(axis.text.x=element_text(size=20,color="black"),axis.text.y=element_text(size=20,color="black"),axis.title.x = element_text(size=20,color="black"),axis.title.y = element_text(size=20,color="black",margin = ggplot2::margin(t = 0, r = 15, b = 0, l = 0)),legend.position = "none",panel.background = element_rect(colour = "black", size=1.5),legend.key = element_blank())+ geom_vline(aes(xintercept=mean,colour=Genotype),size=1,data=colony_stats %>% subset(Genotype %in% colonies))+ scale_color_manual(values = mycolorssub,labels=names(mycolorssub),name="Site") + annotate("text",x=colony_stats$mean[colony_stats$Genotype %in% colonies]-0.4,y=seq(0.75,0.9,length.out=3),color=rev(mycolorssub),size=5,label=as.character(round(colony_stats$mean[colony_stats$Genotype %in% colonies],2)))+ guides(colour = guide_legend(override.aes = list(size=7,alpha=1,shape=3)),fill = guide_legend(override.aes = list(size=3,alpha=1,shape=c(NA,NA,NA))))
+
+
+dummy=data.frame(x=rep(1,3),y=rep(1,3),col=names(mycolorssub))
+dummy_plot=ggplot(data=dummy,aes(x=x,y=y,fill=col,colour=col)) + geom_col() + scale_colour_manual(values = mycolorssub,name="Genotype",labels=names(mycolorssub)) + scale_fill_manual(values = mycolorssub,name="Genotype",labels=names(mycolorssub))+ theme(legend.title = element_text(size=17,color="black"),legend.text = element_text(size=17,color="black"),legend.background = element_rect(fill = "transparent"))
+col_legend=ggpubr::get_legend(dummy_plot)
+
+  #Add inset with relative ratios 
+  inset=df_filt_info %>% subset(Genotype %in% colonies) %>% subset(Treatment %in% c("MMM","+9C")) %>% group_by(Genotype,Treatment) %>% dplyr::summarize(mFvFm=mean(mFvFm))  %>% ggplot(aes(x=Treatment,y=mFvFm,fill=Genotype)) + geom_bar(stat="identity",colour="black",position="dodge")+ theme_linedraw()+labs(x="",y="Fv/Fm")+ scale_fill_manual(values = mycolorssub,labels=names(mycolorssub)) + theme(axis.text.x=element_text(size=15,color="black"),axis.text.y=element_text(size=15,color="black"),axis.title.x = element_text(size=15,color="black"),axis.title.y = element_text(size=15,color="black",margin = ggplot2::margin(t = 0, r = 15, b = 0, l = 0)),legend.title = element_text(size=20,color="black"),legend.text = element_text(size=18,color="black"),legend.position ="none",legend.background = element_rect(fill = "transparent"),
+          panel.background = element_rect(fill="transparent",colour = "black", size=1.5),plot.background = element_rect(fill = "transparent",
+                                 colour = NA_character_),panel.grid.major = element_blank(),panel.grid.minor = element_blank()) +
+  annotate("segment", x = 1.5, xend = 2, y = 0.6, yend = 0.45,
+           arrow = arrow(),size=1.5, colour="black")
+
+
+  p<-ggdraw() + draw_plot(p,x=0,y=0,width=1,height=1) + draw_plot(col_legend,x=0.8,y=0.8,width=0.2,height=0.2,scale=0.2) + draw_plot(inset,x=0.12,y=0.08,width=0.5,height=0.45)
+  
+ggsave(p,filename="D:/Hugo/Figures/GBR_Pheno_Variation/FvFm_metrics_example_colony_level.png",width=12,height=10,dpi=320)
+
+#Make the same figure per genotype 
+```
+
+5/ Additional statistics computations to be reported in article
+
+#Average difference between target and experimental temperature 
+```{r}
+temp_tanks_comp=temp_tanks %>% group_by(Site.name,Treatment) %>% dplyr::summarise(meanTemp_hold.adj=mean(meanTemp_hold.adj)) %>% dplyr::select(Site.name,Treatment,meanTemp_hold.adj) %>% pivot_wider(names_from = Treatment,values_from = meanTemp_hold.adj)
+temp_tanks_comp=temp_tanks_comp %>% merge(sites_data %>% dplyr::select(Site.name,MMM),by="Site.name")
+colnames(temp_tanks_comp)[2:6]=c("MMM3","MMM6","MMM9","MMM","MMMt")
+temp_tanks_comp=temp_tanks_comp %>% mutate(error=(abs(MMM-MMMt)+abs(MMM3-MMMt-3)+abs(MMM6-MMMt-6)+abs(MMM9-MMMt-9))/4)
+
+#Average error without st crisp 
+mean(temp_tanks_comp$error[temp_tanks_comp$Site.name!="St Crispin"])
+
+#Average error for St Crispin
+mean(temp_tanks_comp$error[temp_tanks_comp$Site.name=="St Crispin"])
+```
+
+#Average decline in photosynthetic traits 
+```{r}
+df_filt_info %>% group_by(Treatment) %>% dplyr::summarise(mFvFm2=mean(mFvFm
+                                                                     ),sd=sd(mFvFm)) %>% mutate(Perc_decline=100*(1-(mFvFm2/0.6565353)))
+
+#proportion of genotypes for which decline under +9°C is inferior to 50%
+a=df_filt_info %>% group_by(Genotype,Treatment) %>% dplyr::summarise(mFvFm2=mean(mFvFm
+                                                                     )) %>% pivot_wider(names_from="Treatment",values_from="mFvFm2") %>% mutate(Perc_decline=100*(1-(`+9C`/MMM))) %>% subset(Perc_decline>0)
+
+min(a$Perc_decline)
+max(a$Perc_decline)
+
+sum(a$Perc_decline<50)/nrow(a)
+```
+
+#Summary of experimental conditions 
+```{r}
+target_temp=sites_data %>% dplyr::select(Reef.Name,MMM) %>% mutate(MMMt=round(MMM,2),MMM_3t=MMM+3,MMM_6t=MMM+6,MMM_9t=MMM+9)
+
+sum_temp=temp_tanks %>% group_by(Site.name,Treatment) %>% dplyr::summarize(meanTemphold=mean(meanTemp_hold.adj),sdTemphold=mean(sdTemp_hold)) %>% mutate(meanTemp=paste0(as.character(round(meanTemphold,2)),"-",as.character(round(sdTemphold,2)))) %>% dplyr::select(Site.name,Treatment,meanTemp) %>% pivot_wider(names_from = "Treatment",values_from="meanTemp") %>% merge(target_temp,by.y="Reef.Name",by.x="Site.name")
+
+```
+
+
+
+
+
+

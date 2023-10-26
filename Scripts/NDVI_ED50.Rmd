@@ -1,0 +1,224 @@
+---
+title: "Hyperspec_data_analysis"
+author: "Hugo DENIS"
+date: "2022-12-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Load packages
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(ggrepel)
+library(rstatix)
+library(stringr)
+
+library(cowplot)
+library(ggpubr)
+library(tibble)
+library(xlsx)
+library(drc)
+library(corrplot)
+```
+
+#Import data
+```{r}
+path="/data1/Denis/Hugo/"
+df_hyper=read.csv(paste0(path,"Data/GBR_Hyperspec/ECT1_Aspat_Hyperspec_NDVI.csv"),header=T)
+
+#Exclude genotypes that don't have at least 2 fragments per treatment 
+Gendelete<-df_hyper %>% group_by(Site.name,Genotype) %>%  dplyr::summarise(Ntreatment=n_distinct(Treatment)) %>% subset(Ntreatment<4)
+Gendelete<-c(Gendelete$Genotype,(df_hyper %>% group_by(Site.name,Genotype,Treatment) %>% dplyr::summarise(NFrag=n_distinct(ID)) %>% subset(NFrag<=1))$Genotype)
+df_hyper=df_hyper %>% subset(!Genotype %in% Gendelete)
+df_hyper=df_hyper %>% arrange(Site.name,Genotype,Treatment)
+```
+
+1/ Preliminary tests on NDVI raw measurements
+
+#Control effect of fragment sizes 
+```{r}
+frag_sizes=read.csv(paste0(path,"Data/GBR_Hyperspec/Aspat_fragment_sizes.csv"),header=T)
+#Some missing fragments from hyperspec are removed from the dataset 
+df_hyper2=df_hyper %>% merge(frag_sizes %>% dplyr::select(ID,Npixel),by="ID")
+
+#Fit first model using ML method and use if for backward stepwise selection based on F-tests to compare full and reduced models 
+me=lmer(MeanNDVI ~ Npixel + Site.name + Treatment +(1|Tank) + (1|Genotype), data = df_hyper2,REML=F)
+summary(me)
+#Get confidence intervals
+plot(me)
+qqnorm(resid(me))
+confint(me,level=0.95,method="boot")
+
+```
+
+2/ Computation of ED50 values
+
+#Estimate ED50 for Hyperspec data (Chl and NDVI)
+```{r}
+metric=c("MeanNDVI")
+
+#Max upper limit is adjusted depending on the metric 
+for(m in metric){
+  formula=as.formula(paste0(m,"~meanTemp_hold.adj"))
+  if(m=="MeanChl"){
+    max_upper=0.2
+  } else{
+    max_upper=0.8
+  }
+  max_lower=0.05
+  for(site in unique(df_hyper$Site.name)){
+  model.W2.3<-drm(formula, data=df_hyper %>% subset(Site.name==site), curveid = Genotype, fct=W2.3(names = c('hill', 'max', 'ed50')),upperl=c(NA,max_upper,40),lowerl=c(NA,max_lower,30))
+  saveRDS(model.W2.3,file=paste0("/home/hugo/Outputs/NDVI/",site,"_",m,"_W2.3_wconstraint.rds"))
+}
+}
+
+#Same at the site level 
+for(m in metric){
+  formula=as.formula(paste0(m,"~meanTemp_hold.adj"))
+  if(m=="MeanChl"){
+    max_upper=0.2
+  } else{
+    max_upper=0.8
+  }
+  max_lower=0.05
+  for(site in unique(df_hyper$Site.name)){
+  site.W2.3<-drm(formula, data=df_hyper %>% subset(Site.name==site), fct=W2.3(names = c('hill', 'max', 'ed50')),upperl=c(NA,max_upper,40),lowerl=c(NA,max_lower,30))
+  saveRDS(site.W2.3,file=paste0("Outputs/NDVI/",site,"_",m,"_sitelevel_W2.3_wconstraint.rds"))
+}
+}
+
+```
+
+#Model selection based on AIC 
+```{r}
+model_comp=data.frame()
+  for(site in unique(df_hyper$Site.name)){
+    model_geno=readRDS(paste0("Outputs/NDVI/",site,"_","MeanNDVI","_W2.3_wconstraint.rds"))
+    LL.3=drm(formula, data=df_hyper %>% subset(Site.name==site), curveid = Genotype, fct=LL.3(names = c('hill', 'max', 'ed50')),upperl=c(NA,0.8,40),lowerl=c(NA,0.05,30))
+    W1.3=drm(formula, data=df_hyper %>% subset(Site.name==site), curveid = Genotype, fct=W1.3(names = c('hill', 'max', 'ed50')),upperl=c(NA,0.8,40),lowerl=c(NA,0.05,30))
+    m=data.frame(drc::mselect(model_geno, list(W1.3(), LL.3()), linreg=T, icfct=AIC))
+    m$model=row.names(m)
+    m$Site.name=site
+    m$Metric=me
+    row.names(m)=NULL
+    m$IC[m$model=="W1.3"]=AIC(W1.3)
+    m$IC[m$model=="LL.3"]=AIC(LL.3)
+    model_comp=rbind(model_comp,m)
+  }
+
+model_comp=model_comp %>% arrange(Site.name,IC)
+
+write.csv(model_comp,paste0("Outputs/NDVI/","NDVI_Modelcomparison_AIC.csv"),row.names=F)
+```
+
+#Extract ED values and parameters from models 
+```{r}
+df_ed=data.frame()
+for(m in metric){
+  for(site in unique(df_hyper$Site.name)){
+    model_W2.3=readRDS(paste0("/home/hugo/Outputs/NDVI/",site,"_",m,"_W2.3_wconstraint.rds"))
+    
+    ed_W2.3=data.frame(ED(model_W2.3,50,interval="delta")) %>% mutate(Site.name=site,Metric=m)
+    
+    ed_W2.3$Genotype=sapply(strsplit(rownames(ed_W2.3),":"),"[[",2)
+    
+    #Reformat into single dataframe 
+    colnames(ed_W2.3)=c("Estimate","Std.error","Lower","Upper","Site.name","Metric","Genotype")
+    ed_W2.3$Model="W2.3"
+    
+    df_ed=rbind(df_ed,ed_W2.3)
+  }
+}
+
+
+df_param=data.frame()
+for(site in unique(df_filt_info$Site.name)){
+  model_W2.3=readRDS(paste0("/home/hugo/Outputs/NDVI/",site,"_",m,"_W2.3_wconstraint.rds"))
+  sum_W2.3=broom::tidy(model_W2.3)
+  
+  #Reformat into single dataframe 
+  colnames(sum_W2.3)=c("Term","Genotype","Estimate","Std.error","Statistic","p.value")
+  sum_W2.3$Term[sum_W2.3$Term=="ed50"]="e"
+  sum_W2.3$Model="W2.3"
+  sum_W2.3$Site.name=site
+  df_param=rbind(df_param,sum_W2.3)
+}
+
+colnames(df_ed)[1]="ED50"
+write.csv(df_ed,paste0("/home/hugo/Outputs/NDVI/","NDVI_ED50s.csv",row.names=F))
+
+write.csv(df_param,paste0("/home/hugo/Outputs/NDVI/","Parameters_W2.3.csv"))
+
+```
+
+
+3/ Computation of performance retention
+
+#Compute relative ratios from NDVI measurements
+```{r}
+Hyperspec_ratio=df_hyper %>% group_by(Site.name,Genotype,Treatment) %>% dplyr::summarize(MeanNDVI=mean(MeanNDVI)) %>% dplyr::select(c(Site.name,Genotype,Treatment,MeanNDVI)) %>% tidyr::pivot_wider(names_from = "Treatment",values_from ="MeanNDVI" ) 
+colnames(Hyperspec_ratio)[3:6]=c("MMM3","MMM6","MMM9","MMM")
+Hyperspec_ratio=Hyperspec_ratio %>% dplyr::mutate(Ratio_NDVI=MMM9/MMM)
+
+Temp_ratio=df_hyper %>% group_by(Site.name,Treatment) %>% dplyr::summarize(mTemp=mean(meanTemp_hold.adj)) %>% tidyr::pivot_wider(names_from = "Treatment",values_from ="mTemp" ) 
+colnames(Temp_ratio)[2:5]=c("MMM3","MMM6","MMM9","MMM")
+Temp_ratio=Temp_ratio %>% mutate(Ratio_Temp=(MMM9-MMM)/9)
+Temp_ratio$MMM_sat=sites_data$MMM
+Temp_ratio$MMM_delta=Temp_ratio$MMM-Temp_ratio$MMM_sat
+
+Hyperspec_ratio=Hyperspec_ratio %>% merge(Temp_ratio %>% dplyr::select(Site.name,Ratio_Temp,MMM_delta),by="Site.name") 
+
+Hyperspec_ratio=Hyperspec_ratio %>% mutate(Ratio_NDVI.adj=Ratio_NDVI*Ratio_Temp)
+
+#Account for differences between MMM (treatment ) and MMM site
+Hyperspec_site=Hyperspec_ratio %>% group_by(Site.name) %>% dplyr::summarize(mratio=mean(Ratio_NDVI.adj)) 
+Hyperspec_site$MMM_delta=Temp_ratio$MMM_delta
+
+anova=aov(mratio~MMM_delta,data=Hyperspec_site)
+par(mforw=c(2,2))
+plot(anova)
+summary(anova)
+
+#Elminate site effect of MMM_delta by using grand mean + MMM_delta residuals 
+mod <- lm(Ratio_NDVI.adj~MMM_delta,data=Hyperspec_ratio)
+Hyperspec_ratio2 <- broom::augment(mod, data = Hyperspec_ratio) %>%
+  mutate(Ratio_NDVI.adj2 = mean(Hyperspec_ratio$Ratio_NDVI.adj) + .resid)
+Hyperspec_ratio$Ratio_NDVI.adj=Hyperspec_ratio$Ratio_NDVI.adj2
+
+write.csv(Hyperspec_ratio2,paste0("Outputs/NDVI/","NDVI_ratios_adjusted.csv"),row.names=F)
+```
+
+
+5/ Additional statistics computations to be reported in article
+
+#Average decline in chlorophyll content
+```{r}
+#Global decline in traits  
+sum=df_hyper %>% group_by(Treatment) %>% dplyr::summarise(mNDVI=mean(MeanNDVI
+                                                                     ),sd=sd(MeanNDVI)) 
+
+sum=sum%>% mutate(Perc_decline=100*(1-(mNDVI/sum$mNDVI[4])))
+
+a=df_hyper %>% group_by(Genotype,Treatment) %>% dplyr::summarise(mNDVI=mean(MeanNDVI
+                                                                     )) %>% pivot_wider(names_from="Treatment",values_from="mNDVI") %>% mutate(Perc_decline=100*(1-(`+9C`/MMM))) %>% subset(Perc_decline>0)
+
+min(a$Perc_decline)
+max(a$Perc_decline)
+
+sum(a$Perc_decline<50)/nrow(a)
+```
+
+
+
+
+#Save summary of averages per site and treatment
+```{r}
+sum=df_hyper  %>% group_by(Site.name,Treatment) %>% dplyr::summarise(mNDVI=mean(MeanNDVI)) %>% arrange(Treatment)
+write.xlsx(x=data.frame(sum),file="D:/Hugo/Data/GBR_PAM/NDVI_site_treatment_averages.xlsx",sheetName = "Sheet1")
+```
+
