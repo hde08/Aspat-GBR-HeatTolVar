@@ -1,0 +1,217 @@
+---
+title: "Global figure phenoxenv"
+author: "Hugo DENIS"
+date: "2023-05-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Packages
+```{r}
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(raster)
+library(cowplot)
+```
+
+#Import data
+```{r}
+path="/home/hugo/Outputs/PhenoxEnv/"
+
+#Import random forest results
+Imp_rf_rep=read.csv(paste0(path,"RF_var_importance_scaled.csv"),header=T)
+Pred_accuracy=read.csv(paste0(path,"RF_var_pred_accuracy_scaled.csv"),header=T)
+
+#Import ridge regression results 
+ridge_coeff=read.csv(paste0(path,"Ridge_reg_coeff_bootstrap.csv"),header=T)
+ridge_rsq=read.csv(paste0(path,"Ridge_reg_Rsq_bootstrap.csv"),header=T)
+coeff_df=read.csv(paste0(path,"Ridge_reg_plot_coeff.csv"),header=T)
+cv_df=read.csv(paste0(path,"Ridge_reg_plot_lambda.csv"),header=T)
+
+```
+
+#Compute model results summary
+```{r}
+#Summary of variable importance in RF model
+ImpData = Imp_rf_rep %>% mutate(Trait_metric=paste0(Trait,"_",Metric)) %>% group_by(Trait_metric,Variable) %>% dplyr::summarize(mean=mean(Varimp),sd=sd(Varimp)) 
+colnames(ImpData)=c("Trait_metric","Var","MeanIncMSE","sdIncMSE")
+
+#Summary of predictive accuracy of RF model
+PredData=Pred_accuracy %>% mutate(Trait_metric=paste0(Trait,"_",Metric)) %>% group_by(Trait_metric) %>% dplyr::summarize(meanR2=mean(R2_test),sdR2=sd(R2_test),meanR2_adj=mean(R2_test.adj),sdR2_adj=sd(R2_test.adj)) 
+
+#Summary of ridge coefficients
+sum_ridge=ridge_coeff %>% group_by(Trait_metric,term) %>%
+  dplyr::summarise(mean = mean(estimate), sd = sd(estimate), n = n(),lower=Rmisc::CI(estimate, ci=0.95)[3],upper=Rmisc::CI(estimate, ci=0.95)[1],q1=quantile(estimate)[2],q3=quantile(estimate)[4],median=median(estimate),IQ=q3-q1,min=q1-1.5*IQ,max=q3+1.5*IQ) %>%
+  ungroup() %>% mutate(signif=if_else(lower<0 & upper >0,"ns","s")) %>% subset(term !="(Intercept)")
+
+#Summary od predictive accuracy ridge regression
+RidgePred=ridge_rsq %>% group_by(Trait_metric) %>% dplyr::summarize(meanR2=mean(Rsq_test),sdR2=sd(Rsq_test))
+
+#Summary of R2
+Pred=data.frame(Trait_metric=PredData$Trait_metric,RF_R2=PredData$meanR2,RR_R2=RidgePred$meanR2)
+
+paste0("italic('p')~'< 0.001'")
+
+Pred$R2lab=paste0("~italic('R')^2==",as.character(round(Pred$RF_R2,2)),"/",as.character(round(Pred$RR_R2,2)))
+Pred$Trait_metric[Pred$Trait_metric=="NDVI_Ratio"]="NDVI +9C/MMM"
+Pred$Trait_metric[Pred$Trait_metric=="FvFm_Ratio"]="Fv/Fm +9C/MMM"
+Pred$Trait_metric[Pred$Trait_metric=="NDVI_ED50"]="NDVI ED50"
+Pred$Trait_metric[Pred$Trait_metric=="FvFm_ED50"]="Fv/Fm ED50"
+```
+
+#Make general plot 
+#This plot summarizes results of phenotype x env analyses obtained through random forest and ridge regression
+#The left annotation needs to be done manually 
+```{r}
+df_group=data.frame(Type=c("Thermal history","Water chemistry","Depth","Clouds","Pig","Hydro"),Var=c("AR,ROTC_ss,TSA_DHW_stdev,DHW_freq_sup4,DHW_collection,DHW_freq_sup4_1year,MMM","Turbidity","Depth","CF30a","Health.score","Velocity_OM"))
+
+#Manually edit the coefficient values to set to 0 those that are not singificantly different from 0 
+
+mat=sum_ridge %>% mutate(mean=if_else(signif=="s",mean,0)) %>% dplyr::select(Trait_metric,term,mean) %>% pivot_wider(names_from="term",values_from="mean") 
+
+
+data=mat %>% gather(AR:Velocity_OM,key="term",value="mean")
+  for(i in 1:nrow(data)){
+    data$group[i]=df_group$Type[grepl(data$term[i],df_group$Var)]
+  }
+data=data %>% arrange(group)
+data$term=factor(data$term,levels=unique(data$term))
+
+
+#Add variable importance from random forest
+
+#Scale Mean Inc MSE coefficients
+ImpData=ImpData %>% group_by(Trait_metric) %>% mutate(maxgroup=max(MeanIncMSE),mingroup=min(MeanIncMSE)) %>% ungroup() %>% mutate(meanMSE=mean(MeanIncMSE),Scaled_MeanIncMSE=meanMSE*(MeanIncMSE-mingroup)/(maxgroup-mingroup)) 
+
+data=data %>% mutate(Trait_metric_term=paste0(Trait_metric,"_",term)) %>% merge(ImpData %>% mutate(Trait_metric_term=paste0(Trait_metric,"_",Var)) %>% ungroup() %>% dplyr::select(c(Trait_metric_term,Scaled_MeanIncMSE)),by="Trait_metric_term")
+
+
+data$Trait_metric[data$Trait_metric=="NDVI_Ratio"]="NDVI +9C/MMM"
+data$Trait_metric[data$Trait_metric=="FvFm_Ratio"]="Fv/Fm +9C/MMM"
+data$Trait_metric[data$Trait_metric=="NDVI_ED50"]="NDVI ED50"
+data$Trait_metric[data$Trait_metric=="FvFm_ED50"]="Fv/Fm ED50"
+
+#Reorder the variables
+data$term=factor(data$term,levels=rev(c("MMM","AR","ROTC_ss","TSA_DHW_stdev","DHW_freq_sup4","DHW_collection","DHW_freq_sup4_1year","CF30a","Turbidity","Velocity_OM","Depth","Health.score")))
+
+l=0.1
+heatmap=ggplot(data = data, aes(x=Trait_metric,y=term)) + 
+  geom_tile(colour="black",size=0.5,fill="white")+
+  geom_point(aes(colour=mean,size=Scaled_MeanIncMSE)) +
+  scale_colour_distiller(palette = "RdBu",direction=-1,limits=c(-l,l))+ theme_void()+ labs(x="",y="",colour="Ridge regression\nStandardized \nCoefficients",size="Random Forest\nVar Importance\n(Mean Inc MSE)")+ theme(rect = element_rect(fill = "transparent",colour="transparent"),panel.background = element_rect(fill='white'), 
+    plot.background = element_blank(), 
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank(), 
+    legend.background = element_rect(fill='white'),
+    legend.box.background = element_rect(fill='transparent',colour="transparent"),axis.text.x=element_text(size=17,color="black",angle=90,vjust=0.5,hjust=0.99),axis.text.y=element_text(size=17,color="black",angle=0,hjust=0.99,vjust=1),axis.title.x = element_text(size=20,color="black"),legend.title = element_text(size=20,color="black"),legend.text = element_text(size=20,color="black"),legend.position = "right",plot.margin = ggplot2::margin(t=3,r=1,b=1,l=1, "cm"),legend.margin=unit(1.5,"cm")) +
+  theme(legend.key.size = unit(1, 'cm')) +
+  scale_size_continuous(range = c(5,17)) +geom_text(aes(x=Trait_metric,y=13,label=R2lab,fontface=2),data=Pred,angle=45,size=7,hjust=0.2,parse = TRUE) +
+  coord_equal(clip="off")
+
+#Add R2 value above plot
+#Highlight in bold certain variables
+#Edit the legend on the side 
+#Put maps on the right 
+#Reorder the different variables 
+#Put 2 as exponent
+# 
+path="/data1/Denis/Hugo/"
+ggsave(heatmap,filename=paste0(path,"Figures/Phenotype_x_Env/Ridge_global_plot_v3.png"),width=16,height=14,dpi=320)
+```
+
+#Make site maps of important predictors -> extract it from Coral Reef Watch 
+```{r}
+australia_border<-raster::getData("GADM",country="AUS",level=0)
+
+#Unep reefs shapefile
+unep_reef_crop<-sf::st_read("/home/hugo/PhD/GBR_Env_Data_Extraction/14_001_WCMC008_CoralReefs2018_v4_1/Custom_data/unep_reefs_cropped.shp")
+
+Both.sites=read.csv(paste0(path,"/Data/GBR_PAM/Sites_thermal_tolerance_summary_v2.csv"),header=T)
+
+#Set aesthetic parameters
+legend_width=12
+legend_height=4
+legend_text_size=15
+point_size=4
+axis_text_size=18
+
+cities_df=data.frame(City=c("Cairns","Townsville","Mackay","Rockhampton"),Lon=c(145.754120,146.816956,149.186813,150.511673),Lat=c(-16.925491,-19.258965,-21.144337,-23.375000),vjust=c(-0.4,-0.4,-0.4,+0.4),hjust=c(0.6,0,0.1,0))
+
+#Make MMM figure
+MMM=stack("/home/hugo/PhD/GBR_Env_Data_Extraction/CoralWatchGBR/Output_metrics/CoralWatch_MMM_GBR.nc")
+MMM_df=as.data.frame(MMM,xy=T)
+
+new_palette=c("#1ba3c6" ,"#2cb5c0","#FFF880","#FFE135","#C60012") 
+MMM_map<-ggplot() +  
+  geom_raster(aes(fill=layer,x=x,y=y),data=MMM_df)+ geom_polygon(data=australia_border, aes(long,lat,group=group),fill="grey",colour="black") + geom_sf(data = unep_reef_crop['LAYER_NAME'],fill="grey") + coord_sf(xlim=c(145,153),ylim=c(-24.5,-14),expand=F)+ theme(legend.position="bottom",panel.border = element_rect(colour = "black", fill=NA, size=0.5),panel.background = element_rect(fill ="transparent"),panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),axis.text.x = element_text(size=axis_text_size,color="black"),axis.text.y=element_text(size=axis_text_size,color="black"),axis.title.x = element_text(size=20,color="black"),axis.title.y = element_text(size=20,color="black"),legend.title=element_text(size=legend_text_size,vjust=0.9),legend.text=element_text(size=legend_text_size),plot.margin=margin(t = 10, r = 5, b = 5, l = 5, unit = "pt"),legend.key.height = unit(legend_height,"mm"),legend.key.width = unit(legend_width,"mm"),legend.margin=margin(-15, 0, 0, 0)) + geom_point(data=Both.sites,aes(x=Lon,y=Lat),fill="white",size=point_size,shape=21, color="black")+ labs(x="",y="",fill="MMM") +scale_fill_gradientn(colours = new_palette,limits=c(26.5,29),breaks=c(27,28,29))+ scale_x_discrete(breaks=c(145,149,153)) + geom_point(data=cities_df,aes(x=Lon,y=Lat),fill="black",size=point_size,shape=22, color="black") + geom_text(size=6.5,aes(x=Lon+hjust,y=Lat+vjust,label=City),data=cities_df)
+
+# ggsave(MMM_map,filename="D:/Hugo/Figures/Phenotype_x_Env/MMM_map.png",width=16,height=14,dpi=320)
+
+#Make AR map
+
+AR=raster::stack("/home/hugo/PhD/GBR_Env_Data_Extraction/CoralWatchGBR/Output_metrics/CoralWatch_AR_GBR.nc")
+AR_df=raster::as.data.frame(AR,xy=T)
+
+# new_palette=c("#FFFFCC" ,"#C7E9B4" ,"#7FCDBB" ,"#41B6C4" ,"#1D91C0" ,"#225EA8" ,"#0C2C84") 
+AR_map<-ggplot() +  
+  geom_raster(aes(fill=layer,x=x,y=y),data=AR_df)+ geom_polygon(data=australia_border, aes(long,lat,group=group),fill="grey",colour="black") + geom_sf(data = unep_reef_crop['LAYER_NAME'],fill="grey") + coord_sf(xlim=c(145,153),ylim=c(-24.5,-14),expand=F)+ theme(legend.position="bottom",panel.border = element_rect(colour = "black", fill=NA, size=0.5),panel.background = element_rect(fill ="transparent"),panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),axis.text.x = element_text(size=axis_text_size,color="black"),axis.text.y=element_text(size=axis_text_size,color="black"),axis.title.x = element_text(size=20,color="black"),axis.title.y = element_text(size=20,color="black"),legend.title=element_text(size=legend_text_size,vjust=0.9),legend.text=element_text(size=legend_text_size),plot.margin=margin(t = 10, r = 5, b = 5, l = 5, unit = "pt"),legend.key.height = unit(legend_height,"mm"),legend.key.width = unit(legend_width,"mm"),legend.margin=margin(-15, 0, 0, 0)) + geom_point(data=Both.sites,aes(x=Lon,y=Lat),fill="white",size=point_size,shape=21, color="black")+ labs(x="",y="",fill="AR") +scale_fill_gradientn(colours = new_palette,limits=c(4,11),breaks=c(4,6,8,10)) + scale_x_discrete(breaks=c(145,149,153))+ geom_point(data=cities_df,aes(x=Lon,y=Lat),fill="black",size=point_size,shape=22, color="black") + geom_text(size=6.5,aes(x=Lon+hjust,y=Lat+vjust,label=City),data=cities_df)
+
+# ggsave(AR_map,filename="D:/Hugo/Figures/Phenotype_x_Env/AR_map.png",width=16,height=14,dpi=320)
+
+#Make DHW collection MAP 
+
+DHW_collec=stack("/home/hugo/PhD/GBR_Env_Data_Extraction/CoralWatchGBR/Output_metrics/CoralWatch_DHW_collection_GBR.nc")
+DHW_collec[DHW_collec>8]=8
+DHW_collec_df=as.data.frame(DHW_collec,xy=T)
+
+new_palette=c("#1ba3c6" ,"#2cb5c0","#FFF880","#FFE135","#C60012") 
+DHW_collec_map<-ggplot() +  
+  geom_raster(aes(fill=layer,x=x,y=y),data=DHW_collec_df)+ geom_polygon(data=australia_border, aes(long,lat,group=group),fill="grey",colour="black") + geom_sf(data = unep_reef_crop['LAYER_NAME'],fill="grey") + coord_sf(xlim=c(145,153),ylim=c(-24.5,-14),expand=F)+ theme(legend.position="bottom",panel.border = element_rect(colour = "black", fill=NA, size=0.5),panel.background = element_rect(fill ="transparent"),panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),axis.text.x = element_text(size=axis_text_size,color="black"),axis.text.y=element_text(size=axis_text_size,color="black"),axis.title.x = element_text(size=20,color="black"),axis.title.y = element_text(size=20,color="black"),legend.title=element_text(size=legend_text_size,vjust=0.9),legend.text=element_text(size=legend_text_size),plot.margin=margin(t = 10, r = 5, b = 5, l = 5, unit = "pt"),legend.key.height = unit(legend_height,"mm"),legend.key.width = unit(legend_width,"mm"),legend.margin=margin(-15, 0, 0, 0)) + geom_point(data=Both.sites,aes(x=Lon,y=Lat),fill="white",size=point_size,shape=21, color="black")+ labs(x="",y="",fill="DHW\n2022/03/10") +scale_fill_gradientn(colours = new_palette,limits=c(0,8),breaks=c(2,4,6,8),labels=c(2,4,6,">8")) + scale_x_discrete(breaks=c(145,149,153))+ geom_point(data=cities_df,aes(x=Lon,y=Lat),fill="black",size=point_size,shape=22, color="black") + geom_text(size=6.5,aes(x=Lon+hjust,y=Lat+vjust,label=City),data=cities_df)
+
+# ggsave(DHW_collec_map,filename="D:/Hugo/Figures/Phenotype_x_Env/DHWcollec_map.png",width=16,height=14,dpi=320)
+
+#Make DHW_TSA_STDEV map
+DHW_TSA_Stdev=raster("/home/hugo/PhD/GBR_Env_Data_Extraction/CoralWatchGBR/Output_metrics/CoralWatch_TSA_DHW_stdev_GBR.tif")
+DHW_TSA_Stdev_df=as.data.frame(DHW_TSA_Stdev,xy=T)
+
+# new_palette=c("#00FFFF" ,"#FFFF00") 
+DHW_stdev_map<-ggplot() +  
+  geom_raster(aes(fill=CoralWatch_TSA_DHW_stdev_GBR,x=x,y=y),data=DHW_TSA_Stdev_df)+ geom_polygon(data=australia_border, aes(long,lat,group=group),fill="grey",colour="black") + geom_sf(data = unep_reef_crop['LAYER_NAME'],fill="grey") + coord_sf(xlim=c(145,153),ylim=c(-24.5,-14),expand=F)+ theme(legend.position="bottom",panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5),panel.background = element_rect(fill ="transparent"),panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),axis.text.x = element_text(size=axis_text_size,color="black"),axis.text.y=element_text(size=axis_text_size,color="black"),axis.title.x = element_text(size=20,color="black"),axis.title.y = element_text(size=20,color="black"),legend.title=element_text(size=legend_text_size,vjust=0.9),legend.text=element_text(size=legend_text_size),plot.margin=margin(t = 10, r = 5, b = 5, l = 5, unit = "pt"),legend.key.height = unit(legend_height,"mm"),legend.key.width = unit(legend_width,"mm"),legend.margin=margin(-15, 0, 0, 0)) + geom_point(data=Both.sites,aes(x=Lon,y=Lat),fill="white",size=point_size,shape=21, color="black")+ labs(x="",y="",fill="DHW\nTSA stdev") +scale_fill_gradientn(colours = new_palette,limits=c(0,2.5),breaks=c(0.5,1,1.5,2)) + scale_x_discrete(breaks=c(145,149,153))+ geom_point(data=cities_df,aes(x=Lon,y=Lat),fill="black",size=point_size,shape=22, color="black") + geom_text(size=6.5,aes(x=Lon+hjust,y=Lat+vjust,label=City),data=cities_df)
+
+# ggsave(DHW_stdev_map,filename="D:/Hugo/Figures/Phenotype_x_Env/DHW_stdev_map.png",width=16,height=14,dpi=320)
+
+#Make DHW_freq_sup4 map
+DHW_TSA_Freq_sup4=raster("/home/hugo/PhD/GBR_Env_Data_Extraction/CoralWatchGBR/Output_metrics/CoralWatch_TSA_DHW_freq_sup4_GBR.tif")
+#Convert number of occurence to annual frequency  
+DHW_TSA_Freq_sup4=365*DHW_TSA_Freq_sup4/13607
+
+#Set all above 8 to 8 for plotting reasons 
+DHW_TSA_Freq_sup4[DHW_TSA_Freq_sup4>12]=12 
+DHW_TSA_Freq_sup4_df=as.data.frame(DHW_TSA_Freq_sup4,xy=T)
+
+#Number of days over which the frequency is computed  13607
+
+# new_palette=c("#00FFFF" ,"#FFFF00") 
+DHW_TSA_Freq_sup4_map<-ggplot() +  
+  geom_raster(aes(fill=CoralWatch_TSA_DHW_freq_sup4_GBR,x=x,y=y),data=DHW_TSA_Freq_sup4_df)+ geom_polygon(data=australia_border, aes(long,lat,group=group),fill="grey",colour="black") + geom_sf(data = unep_reef_crop['LAYER_NAME'],fill="grey") + coord_sf(xlim=c(145,153),ylim=c(-24.5,-14),expand=F)+ theme(legend.position="bottom",panel.border = element_rect(colour = "black", fill=NA, linewidth=0.5),panel.background = element_rect(fill ="transparent"),panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),axis.text.x = element_text(size=axis_text_size,color="black"),axis.text.y=element_text(size=axis_text_size,color="black"),axis.title.x = element_text(size=20,color="black"),axis.title.y = element_text(size=20,color="black"),legend.title=element_text(size=legend_text_size,vjust=0.9),legend.text=element_text(size=legend_text_size),plot.margin=margin(t = 10, r = 5, b = 5, l = 5, unit = "pt"),legend.key.height = unit(legend_height,"mm"),legend.key.width = unit(legend_width,"mm"),legend.margin=margin(-15, 0, 0, 0)) + geom_point(data=Both.sites,aes(x=Lon,y=Lat),fill="white",size=point_size,shape=21, color="black")+ labs(x="",y="",fill="DHW>4\nFrequency") +scale_fill_gradientn(colours = new_palette,limits=c(0,12),breaks=c(4,8,12),labels=c(4,8,">12")) + scale_x_discrete(breaks=c(145,149,153))+ geom_point(data=cities_df,aes(x=Lon,y=Lat),fill="black",size=point_size,shape=22, color="black") + geom_text(size=6.5,aes(x=Lon+hjust,y=Lat+vjust,label=City),data=cities_df)
+```
+
+#Bind everything together into a single figure
+#Article Figure 3
+```{r}
+
+global_plot=ggdraw() +draw_plot(heatmap,x=0,y=0,width=0.5,height=1)+  draw_plot(MMM_map,x=0.47,y=0.5,width=0.25,height=0.5) +  draw_plot(AR_map,x=0.47,y=0,width=0.25,height=0.5)+  draw_plot(DHW_collec_map,x=0.72,y=0.5,width=0.25,height=0.5)+  draw_plot(DHW_TSA_Freq_sup4_map,x=0.72,y=0,width=0.25,height=0.5)+ 
+  theme(plot.background = element_rect(fill="white", color = NA))+ draw_plot_label(label=c("a", "b","c","d","e"),x=c(0.05,0.465,0.465,0.715,0.715),c(1, 1,0.5,1,0.5),size = 30)
+
+ggsave(global_plot,filename=paste0(path,"/Figures/Phenotype_x_Env/Figure_5_v4.png"),width=18.5,height=12,dpi=400)
+```
+

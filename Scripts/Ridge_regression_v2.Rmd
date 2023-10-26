@@ -1,0 +1,238 @@
+---
+title: "Ridge regression"
+author: "Hugo DENIS"
+date: "2023-01-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(lme4)
+library(dplyr)
+library(ggplot2)
+library(MuMIn)
+library(jtools)
+library(glmnet)
+library(tidyr)
+library(cowplot)
+```
+
+#Import data 
+```{r}
+colony_env_wide_red=read.csv(paste0(path,"Hugo/Data/GBR_env_data/ECT1_Aspat_colonies_environmental_data_uncor_v3_0.7.csv"),header=T)
+
+colony_env_wide_all=read.csv(paste0(path,"Hugo/Data/GBR_env_data/ECT1_Aspat_colonies_environmental_data_24metrics.csv"),header=T)
+
+pheno_data=read.csv(paste0(path,"Hugo/Results/Phenotypic_trait_per_genotype.csv"),header=T)
+#Exclude St Crispin from ED50 values
+pheno_data=pheno_data %>% subset(Metric!="ED50" | Site.name!="St Crispin")
+
+sites_data=read.csv(paste0(path,"Hugo/Data/GBR_env_data/Aspath_sites_data.csv"))
+colnames(sites_data)[1]="Reef.Name"
+sites_data=sites_data %>% subset(Reef.Name %in% pheno_data$Site.name)
+
+
+mycolors<-c("#1ba3c6" ,"#2cb5c0" ,"#21B087", "#33a65c" ,"#a2b627" ,"#f8b620", "#f89217", "#f06719","#e03426" ,"#f64971", "#fc719e" , "#ce69be", "#7873c0", "#4f7cba")
+#Order site names by MMM
+names(mycolors)<-sites_data$Reef.Name[order(sites_data$MMM)]
+
+#Define colors for the 4 metrics 
+metric_colors=c("#CC3333","#FF9999","#0066CC","#66CCCC")
+names(metric_colors)=c("FvFm_ED50","NDVI_ED50","FvFm_Ratio","NDVI_Ratio")
+
+pheno_data_env=merge(pheno_data,colony_env_wide_red,by.x="Genotype")
+pheno_data_env=merge(pheno_data_env,colony_env_wide_all %>% dplyr::select(c(Genotype,MMM)),by="Genotype")
+pheno_data_env=pheno_data_env %>% mutate(Trait_metric=paste0(Trait,"_",Metric))
+```
+
+
+1/ Run ridge regression model 
+
+
+#Look at marginal effect of DHW_collection vs MMM 
+#Run additional ridge regression with MMM included   
+```{r}
+ridge_coeff=data.frame()
+ridge_rsq=data.frame()
+coeff_df=data.frame()
+cv_df=data.frame()
+for(x in unique(pheno_data_env$Trait_metric)){
+  pheno_data_env_sub=pheno_data_env %>% subset(Trait_metric==x)
+    for(j in 1:100){
+      
+      #Split dataset
+      sample=(pheno_data_env_sub %>% 
+        group_by(Site.name)  %>% sample_n(0.7*n_distinct(Genotype)))$Genotype
+      train=pheno_data_env_sub %>% subset(Genotype %in% sample)
+      test=pheno_data_env_sub %>% subset(!Genotype %in% sample) 
+      
+      ytrain=train[,"Value"]
+      xpred_train=data.matrix(train[,7:(ncol(train)-1)])
+      ytest=test[,"Value"]
+      xpred_test=data.matrix(test[,7:(ncol(test)-1)])
+  
+      #Scale predictor to compare output
+      xpred_train_scale=scale(xpred_train)
+      xpred_test_scale=scale(xpred_test)
+      
+  
+      #Choice of optimal lambda value 
+      lambda_seq <- 10^seq(3, -9, by = -.1)
+      ridge_cv <- cv.glmnet(xpred_train_scale, ytrain, alpha = 0,lambda=lambda_seq)
+      # Best lambda value the max lambda with error within 1 std off min error
+      best_lambda <- ridge_cv$lambda.1se
+      
+      
+      #Fit new model on train data using best value 
+      best_ridge <- glmnet(xpred_train_scale, ytrain, alpha = 0, lambda = best_lambda,standardize=F)
+
+      #Extract coeff and append to dataframe 
+      coeff_ridge=data.frame(term=names(coef(best_ridge)[,1]),estimate=coef(best_ridge)[,1]) %>% arrange(desc(abs(estimate))) %>% mutate(Trait_metric=x,k=j)
+      
+      #Append data to dataframe
+      ridge_coeff=rbind(ridge_coeff,coeff_ridge)
+      
+      #Prediction accuracy of the model
+      pred_train <- predict(best_ridge, s = best_lambda, newx = xpred_train_scale)
+      pred_test <- predict(best_ridge, s = best_lambda, newx = xpred_test_scale)
+      # R squared formula
+      rsq_train <- 1 - sum((pred_train - ytrain) ^ 2)/sum((ytrain - mean(ytrain)) ^ 2)
+      rsq_test <- 1 - sum((pred_test - ytest) ^ 2)/sum((ytest - mean(ytest)) ^ 2)
+      ridge_rsq=rbind(ridge_rsq,data.frame(Trait_metric=x,k=j,Rsq_test=rsq_test,Rsq_train=rsq_train))
+      
+    }
+  #Plot coeff 
+    a=glmnet(xpred_train_scale, ytrain, alpha = 0, lambda = lambda_seq,standardize=F)
+    coeff=as.data.frame(t(as.matrix(a$beta))) %>% mutate(lambda=a$lambda) %>% gather(AR:DHW_freq_sup4_1year,key="metric",value="Coeff") %>% mutate(Trait_metric=x)
+    coeff_df=rbind(coeff_df,coeff)
+    
+  #Plot lambdas
+    ridge_cv <- cv.glmnet(xpred_train_scale, ytrain, alpha = 0,lambda=lambda_seq)
+    cv_df=rbind(cv_df,data.frame(lambda=ridge_cv$lambda,mse=ridge_cv$cvm,mse_sd=ridge_cv$cvsd,mse_up=ridge_cv$cvup,mse_low=ridge_cv$cvlo,lambda.min=ridge_cv$lambda.min,lambda.1se=ridge_cv$lambda.1se,Trait_metric=x))
+}
+
+#Save the different results
+write.csv(ridge_coeff,"/home/hugo/Outputs/Ridge_reg_coeff_bootstrap.csv",row.names=F)
+write.csv(ridge_rsq,"/home/hugo/Outputs/Ridge_reg_Rsq_bootstrap.csv",row.names=F)
+write.csv(coeff_df,"/home/hugo/Outputs/Ridge_reg_plot_coeff.csv",row.names=F)
+write.csv(cv_df,"/home/hugo/Outputs/Ridge_reg_plot_lambda.csv",row.names=F)
+
+#Save summary of the results 
+sum_ridge=ridge_coeff %>% group_by(Trait_metric,term) %>%
+  dplyr::summarise(mean = mean(estimate), sd = sd(estimate), n = n(),lower=Rmisc::CI(estimate, ci=0.95)[3],upper=Rmisc::CI(estimate, ci=0.95)[1],q1=quantile(estimate)[2],q3=quantile(estimate)[4],median=median(estimate),IQ=q3-q1,min=q1-1.5*IQ,max=q3+1.5*IQ) %>%
+  ungroup() %>% group_by(Trait_metric) %>% arrange(desc(mean),.by_group=TRUE)
+
+write.csv(sum_ridge,"/home/hugo/Outputs/Ridge_reg_coeff_bootstrap_summary.csv",row.names=F)
+```
+
+
+
+2/ Figures
+
+#Make plot of lambda selection
+#Supplementary Fig. 16
+```{r}
+cv_df$Trait_metric[cv_df$Trait_metric=="NDVI_Ratio"]="NDVI +9C/MMM"
+cv_df$Trait_metric[cv_df$Trait_metric=="FvFm_Ratio"]="Fv/Fm +9C/MMM"
+cv_df$Trait_metric[cv_df$Trait_metric=="NDVI_ED50"]="NDVI ED50"
+cv_df$Trait_metric[cv_df$Trait_metric=="FvFm_ED50"]="Fv/Fm ED50"
+
+
+metric_colors=c("#CC3333","#FF9999","#0066CC","#66CCCC")
+names(metric_colors)=c("Fv/Fm ED50","NDVI ED50","Fv/Fm +9C/MMM","NDVI +9C/MMM")
+
+lambda_plot=cv_df %>% ggplot(aes(x=log(lambda),y=mse)) + geom_point(size=3,aes(colour=Trait_metric),shape=18) + geom_errorbar(aes(x=log(lambda),ymax=mse_up,ymin=mse_low)) + geom_vline(aes(xintercept=log(lambda.1se)),size=1,linetype="dashed") + facet_wrap(Trait_metric~.,scales="free",ncol=2,nrow=2) + theme_linedraw()+ labs(x="log(λ)",y="Mean-Squared Error")+ theme(axis.text.x=element_text(size=15,color="black"),axis.text.y=element_text(size=15,color="black"),axis.title.x = element_text(size=20,color="black"),axis.title.y = element_text(size=20,color="black"),legend.title = element_text(size=20,color="black"),legend.text = element_text(size=20,color="black"),legend.position = "none",legend.background = element_rect(fill = "transparent"),
+          panel.background = element_rect(colour = "black", size=1.5),strip.background =element_rect(fill="white"),strip.text = element_text(colour = 'black',size=15))+ guides(colour = guide_legend(override.aes = list(size=3))) + scale_colour_manual(values = metric_colors,name="Phenotypic traits",labels=c("Fv/Fm ED50","NDVI ED50","Fv/Fm Ratio","NDVI Ratio"))
+
+
+ggsave(lambda_plot,filename=paste0(path,"Hugo/Figures/Phenotype_x_Env/lambda_choice_red_scaled_v2.png"),width=14,height=10,dpi=320)
+
+```
+
+#Make plot of parameters regularization
+#Supplementary Fig. 17
+```{r}
+coeff_df$Trait_metric[coeff_df$Trait_metric=="NDVI_Ratio"]="NDVI +9C/MMM"
+coeff_df$Trait_metric[coeff_df$Trait_metric=="FvFm_Ratio"]="Fv/Fm +9C/MMM"
+coeff_df$Trait_metric[coeff_df$Trait_metric=="NDVI_ED50"]="NDVI ED50"
+coeff_df$Trait_metric[coeff_df$Trait_metric=="FvFm_ED50"]="Fv/Fm ED50"
+
+data_ends = coeff_df %>% filter(lambda==min(lambda))
+
+coeff_plot=coeff_df %>% merge(cv_df %>% dplyr::select(Trait_metric,lambda.1se) %>% distinct(Trait_metric,lambda.1se),by="Trait_metric") %>% ggplot(aes(x=log(lambda),y=Coeff,colour=metric)) + geom_line(size=1)  +   facet_wrap(Trait_metric~.,scales="free",ncol=2,nrow=2) + theme_linedraw() + labs(x="log(λ)",y="Coefficients")+ geom_hline(yintercept = 0,linetype="dashed",size=0.5)+ geom_vline(aes(xintercept=log(lambda.1se)),size=1,linetype="dashed") + theme(axis.text.x=element_text(size=15,color="black"),axis.text.y=element_text(size=15,color="black"),axis.title.x = element_text(size=20,color="black"),axis.title.y = element_text(size=20,color="black"),legend.title = element_text(size=20,color="black"),legend.text = element_text(size=20,color="black"),legend.position = "none",legend.background = element_rect(fill = "transparent"),
+          panel.background = element_rect(colour = "black", size=1.5),strip.background =element_rect(fill="white"),strip.text = element_text(colour = 'black',size=15))+ guides(colour = guide_legend(override.aes = list(size=3))) +  ggrepel::geom_label_repel(
+    aes(x=log(lambda),y=Coeff,label = metric), data = data_ends, size = 4
+    )
+
+
+ggsave(coeff_plot,filename=paste0(path,"Hugo/Figures/Phenotype_x_Env/coeff_lambda_plot_red_scaled_v2.png"),width=14,height=10,dpi=320)
+```
+
+#Plots parameter coefficients by types of variables
+#Supplementary figure 13 
+
+```{r}
+#Group for reduced number of variables and MMM
+df_group=data.frame(Type=c("Thermal history","Water chemistry","Depth","Clouds","Pig","Hydro"),Var=c("AR,ROTC_ss,TSA_DHW_stdev,DHW_freq_sup4,DHW_collection,DHW_freq_sup4_1year,MMM","Turbidity","Depth","CF30a","Health.score","Velocity_OM"))
+
+#Summarize coefficients values across bootstrap replicates
+sum_ridge=ridge_coeff %>% group_by(Trait_metric,term) %>%
+  dplyr::summarise(mean = mean(estimate), sd = sd(estimate), n = n(),lower=Rmisc::CI(estimate, ci=0.95)[3],upper=Rmisc::CI(estimate, ci=0.95)[1],q1=quantile(estimate)[2],q3=quantile(estimate)[4],median=median(estimate),IQ=q3-q1,min=q1-1.5*IQ,max=q3+1.5*IQ) %>%
+  ungroup()
+
+
+mybarplot_group=function(df,x,Metric,colour,xpos,ypos){
+  
+  metric_colors=c("#CC3333","#FF9999","#0066CC","#66CCCC")
+  names(metric_colors)=c("FvFm_ED50","NDVI_ED50","FvFm_Ratio","NDVI_Ratio")
+  
+  
+  df_sub=df %>% subset(Trait_metric==x & term !="(Intercept)")
+  for(i in 1:nrow(df_sub)){
+    df_sub$group[i]=df_group$Type[grepl(df_sub$term[i],df_group$Var)]
+  }
+  
+  #Highlight variables that deviate from 0
+  custom_labels=unique(df_sub$term)
+  names(custom_labels)=unique(df_sub$term)
+  bold_vector=c()
+  alpha=c()
+  for(i in 1:length(custom_labels)){ 
+  
+      bold_vector=c(bold_vector,if_else((df_sub$q1[df_sub$term==custom_labels[i]]-df_sub$sd[df_sub$term==custom_labels[i]])<0 & df_sub$q3[df_sub$term==custom_labels[i]]+df_sub$sd[df_sub$term==custom_labels[i]]>0 ,"plain","bold"))
+      alpha=c(alpha,if_else(bold_vector[i]=="plain",0.5,1))
+  }  
+
+  df_sub=df_sub %>% rowwise() %>% mutate(term2=custom_labels[names(custom_labels)==term])
+  p=df_sub%>% ggplot(aes(x=term2)) + geom_hline(yintercept=0,size=1,linetype="dashed")+geom_boxplot(aes(ymin=q1-sd,ymax=q3+sd,lower=q1,middle=median,upper=q3,fill=Trait_metric),stat="identity",colour="black",position=position_dodge(0.85)) + theme_linedraw()+labs(x="Metric",y=paste0("Coefficient","",x))+ scale_fill_manual(values = metric_colors,labels=names(metric_colors)) +
+    theme(
+      legend.position="none",
+      panel.grid.major.y = element_blank(),
+      panel.border = element_blank(),
+      axis.ticks.y = element_blank(),axis.text.x=element_text(size=15,color="black",angle=90,hjust=0.95),axis.text.y=element_text(size=15,color="black"),axis.title.x = element_text(size=15,color="black"),axis.title.y = element_text(size=15,color="black",margin = ggplot2::margin(t = 0, r = 1, b = 0, l = 0)),legend.title = element_text(size=20,color="black"),legend.text = element_text(size=18,color="black"),legend.background = element_rect(fill = "transparent"),
+      panel.background = element_rect(colour = "black", size=1.5),strip.background =element_rect(fill="white",size=1.5),strip.text = element_text(colour = 'black',size=15)) +
+  facet_grid(~ group, scale="free", space="free_x")+ scale_x_discrete(labels=custom_labels) 
+  
+  return(p) 
+}
+
+scaleFUN <- function(x) sprintf("%.2f", x)
+
+mbar1=mybarplot_group(sum_ridge,"FvFm_ED50","Fv/Fm ED50","#CC3333")  + theme(axis.title.x = element_blank(),axis.text.x = element_blank()) + scale_y_continuous(labels=scaleFUN)
+
+mbar2=mybarplot_group(sum_ridge,"NDVI_ED50","NDVI ED50","#FF9999") + theme(axis.title.x = element_blank(),axis.text.x = element_blank()) + scale_y_continuous(labels=scaleFUN)
+
+
+mbar3=mybarplot_group(sum_ridge,"FvFm_Ratio","Fv/Fm +9C/MMM","#0066CC")  + theme(axis.title.x = element_blank(),axis.text.x = element_blank()) + scale_y_continuous(labels=scaleFUN)
+
+
+mbar4=mybarplot_group(sum_ridge,"NDVI_Ratio","NDVI +9C/MMM","#66CCCC") + scale_y_continuous(labels=scaleFUN)
+
+one_ridgeplot=ggdraw() +draw_plot(mbar1,x=0.0,y=0.78,width=1,height=0.22)+draw_plot(mbar2,x=0.0,y=0.56,width=1,height=0.22) +draw_plot(mbar3,x=0.0,y=0.34,width=1,height=0.22) +draw_plot(mbar4,x=0.0,y=0.0,width=1,height=0.34) + draw_plot_label(label=c("a", "b","c","d"),x=c(0.0,0.,0,0.),c(1,0.78,0.56,0.34),size = 25)
+
+ggsave(one_ridgeplot,filename=paste0(path,"Hugo/Figures/Phenotype_x_Env/Ridge_coeffs_all_red_test_wMMM_v2.png"),width=18,height=20,dpi=320)
+```
+

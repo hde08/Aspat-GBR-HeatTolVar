@@ -1,0 +1,229 @@
+---
+title: "Random forest"
+author: "Hugo DENIS"
+date: "2022-11-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Load packages
+```{r}
+library(dplyr)
+library(readr)
+library(tidyr)
+library(ggplot2)
+library(ggrepel)
+library(drc)
+library(rstatix)
+library(stringr)
+library(car)
+library(Rmisc)
+library(cowplot)
+library(ggpubr)
+library(readr)
+library(igraph)
+library(gridExtra)
+library(mgcv)
+# library(mgcv.helper)
+library(caret)
+# library(gratia)
+library(party)
+
+#Load custom functions 
+path="/data1/Denis/"
+source(paste0(path,"Hugo/Scripts/cforest_plotting_functions.R"))
+```
+
+#Load the data
+```{r}
+#Env data
+colony_env_wide_red=read.csv(paste0(path,"Hugo/Data/GBR_env_data/ECT1_Aspat_colonies_environmental_data_uncor_v3_0.7.csv"),header=T)
+
+colony_env_wide_all=read.csv(paste0(path,"Hugo/Data/GBR_env_data/ECT1_Aspat_colonies_environmental_data_24metrics.csv"),header=T)
+
+pheno_data=read.csv(paste0(path,"Hugo/Results/Phenotypic_trait_per_genotype.csv"),header=T)
+#Exclude St Crispin from ED50 values
+pheno_data=pheno_data %>% subset(Metric!="ED50" | Site.name!="St Crispin")
+
+sites_data=read.csv(paste0(path,"Hugo/Data/GBR_env_data/Aspath_sites_data.csv"))
+colnames(sites_data)[1]="Reef.Name"
+sites_data=sites_data %>% subset(Reef.Name %in% pheno_data$Site.name)
+
+
+mycolors<-c("#1ba3c6" ,"#2cb5c0" ,"#21B087", "#33a65c" ,"#a2b627" ,"#f8b620", "#f89217", "#f06719","#e03426" ,"#f64971", "#fc719e" , "#ce69be", "#7873c0", "#4f7cba")
+#Order site names by MMM
+names(mycolors)<-sites_data$Reef.Name[order(sites_data$MMM)]
+
+#Define colors for the 4 metrics 
+
+metric_colors=c("#CC3333","#FF9999","#0066CC","#66CCCC")
+names(metric_colors)=c("FvFm_ED50","NDVI_ED50","FvFm_Ratio","NDVI_Ratio")
+
+pheno_data_env=merge(pheno_data,colony_env_wide_red ,by.x="Genotype",by.y="Genotype")
+pheno_data_env=merge(pheno_data_env,colony_env_wide_all %>% dplyr::select(c(Genotype,MMM)),by="Genotype")
+```
+
+#Define models and different functions 
+```{r}
+
+#Define functions to compute prediction accuracy
+R2=function(observed,predicted){
+  r=1-sum((observed-predicted)^2)/sum((observed-mean(observed))^2)
+  return(r)
+}
+
+R2.adj=function(observed,predicted,N,K){
+  r=1 - ((1-R2(observed,predicted))*(N-1)/(N-K-1))
+  return(r)
+}
+
+MSE=function(observed,predicted,N){
+  m=sum((observed-predicted)^2)/N
+  return(m)
+}
+
+RMSE=function(observed,predicted,N){
+  m=sqrt(MSE(observed,predicted,N))
+  return(m)
+}
+
+```
+
+1/ Tune RF parameters
+
+#Tuning of mtry parameter
+```{r}
+#Set model formula (moderately correlated variables )
+formula=as.formula(paste0("Value~",paste0(colnames(pheno_data_env)[7:ncol(pheno_data_env)],collapse = "+")))
+
+#For each value of the mtry parameter (1 to max number of parameters)
+#Train a different model and compute OOB error 
+set.seed(123)
+df_mtry=data.frame()
+for(j in 1:10){
+  pheno_metric=pheno_data_env %>% subset(Metric=="ED50" & Trait=="FvFm")
+
+  sample=(pheno_metric %>% 
+    group_by(Site.name)  %>% sample_n(0.7*n_distinct(Genotype)))$Genotype
+  train=pheno_metric %>% subset(Genotype %in% sample) %>% dplyr::select(-c(Genotype,Site.name))
+  for(i in 1:17){
+      cf_ed50= party::cforest(formula=formula,data=train,controls =
+      party::cforest_unbiased(ntree=500,mtry=i))
+      model.pred <- predict(cf_ed50, type="response" , OOB=TRUE)
+      OOB_error=sum((train$Value-model.pred)^2)
+      df_mtry=rbind(df_mtry,data.frame(mtry=i,OOB_error=OOB_error))
+    }
+}
+
+write.csv(df_mtry,"/home/hugo/Outputs/RF_mtry_tuning.csv",row.names=F)
+```
+
+
+#Tuning of ntree parameter 
+```{r}
+sample=(pheno_data_env %>% subset(Metric=="ED50" & Trait=="FvFm") %>% 
+    group_by(Site.name)  %>% sample_n(0.7*n_distinct(Genotype)))$Genotype
+train=pheno_data_env %>% subset(Metric=="ED50" & Trait=="FvFm") %>% subset(Genotype %in% sample) %>% dplyr::select(-c(Genotype,Site.name))
+test=pheno_data_env %>% subset(Metric=="ED50" & Trait=="FvFm") %>% subset(!Genotype %in% sample) %>% dplyr::select(-c(Site.name,Genotype,Metric,CI,Trait))
+
+df_mse=data.frame()
+for(i in seq(1,2000,length.out=100)){
+  cf_ed50= party::cforest(formula=formula,data=train,controls =
+      party::cforest_unbiased(ntree=i,mtry=5))
+  model.pred <- predict(cf_ed50, type="response" ,newdata=test)
+  MSE=mean((test$Value - model.pred)^2)
+  df_mse=rbind(df_mse,data.frame(Ntree=i,MSE=MSE))
+}
+
+write.csv(df_mse,"/home/hugo/Outputs/RF_ntree_tuning.csv",row.names=F)
+```
+
+2/ Run RF models 
+
+
+#Fit several random forest models on each of the 4 metrics 
+```{r}
+#Set model formula (moderately correlated variables )
+formula=as.formula(paste0("Value~",paste0(colnames(pheno_data_env)[7:ncol(pheno_data_env)],collapse = "+")))
+
+set.seed(123)
+#Repeat fitting the model on different datasets 
+Imp_rf_rep=data.frame()
+Pred_accuracy=data.frame()
+for(m in unique(pheno_data_env$Metric)){
+  for(t in unique(pheno_data_env$Trait)){
+    for(j in 1:10){
+  pheno_metric=pheno_data_env %>% subset(Metric==m & Trait==t)
+  
+  #Scale predictors 
+  pheno_metric[,7:ncol(pheno_metric)]=scale(pheno_metric[,7:ncol(pheno_metric)])
+  
+  #Sampling Stratified across sites
+  
+  sample=(pheno_metric %>% 
+    group_by(Site.name)  %>% sample_n(0.7*n_distinct(Genotype)))$Genotype
+  train=pheno_metric %>% subset(Genotype %in% sample) %>% dplyr::select(-c(Genotype,Site.name))
+  test=pheno_metric %>% subset(!Genotype %in% sample) %>% dplyr::select(-c(Site.name,Genotype,Metric,CI,Trait))
+  
+  rf_models=lapply(c(formula),function(x) party::cforest(formula=x,data=train,controls =
+party::cforest_unbiased(ntree=1000,mtry=min(length(attr(terms(x), "term.labels")),5))))
+  OOB.pred=lapply(rf_models,function(x)predict(x, type="response" , OOB=TRUE))
+  test.pred=lapply(rf_models,function(x)predict(x, newdata=test %>% dplyr::select(-c(Value))))
+  
+  #Compute prediction accuracy only need to compute it on the test set
+  R2s=unlist(lapply(OOB.pred,function(x)R2(train$Value,x)))
+  R2_tests=unlist(lapply(test.pred,function(x)R2(test$Value,x)))
+  RMSEs=sqrt(unlist(lapply(OOB.pred,function(x)MSE(train$Value,x,nrow(train)))))
+  RMSE_tests=sqrt(unlist(lapply(test.pred,function(x)MSE(test$Value,x,nrow(test)))))
+  R2_test.adjs=R2.adj(test$Value,test.pred[[1]],nrow(test),ncol(test)-1)
+  
+  #Merge metrics into a single dataframe 
+  Pred_accuracy=rbind(Pred_accuracy,data.frame(Trait=t,Metric=m,RF_id=j,Model=c("Full model"),R2=R2s,R2_test=R2_tests,R2_test.adj=R2_test.adjs,RMSE=RMSEs,RMSE_test=RMSE_tests,Formula=paste(deparse(formula, width.cutoff = 500), collapse="")))
+  
+  
+  varimp=sort(party::varimp(rf_models[[1]]),decreasing=T)
+  ImpData=data.frame(Trait=t,Metric=m,Variable=names(varimp),Varimp=varimp,RF_id=j)
+  Imp_rf_rep=rbind(Imp_rf_rep,ImpData)
+}
+
+    
+  }
+}
+
+
+write.csv(Imp_rf_rep,"/home/hugo/Outputs/PhenoxEnv/RF_var_importance_scaled.csv",row.names=F)
+write.csv(Pred_accuracy,"/home/hugo/Outputs/PhenoxEnv/RF_var_pred_accuracy_scaled.csv",row.names=F)
+
+Imp_rf_rep_summary=Imp_rf_rep %>% mutate(Trait_metric=paste0(Trait,"_",Metric)) %>% group_by(Trait_metric,Variable) %>%
+  dplyr::summarise(mean = mean(Varimp), sd = sd(Varimp), n = n(),lower=Rmisc::CI(Varimp, ci=0.95)[3],upper=Rmisc::CI(Varimp, ci=0.95)[1],q1=quantile(Varimp)[2],q3=quantile(Varimp)[4],median=median(Varimp),IQ=q3-q1,min=q1-1.5*IQ,max=q3+1.5*IQ) %>%
+  ungroup() %>% group_by(Trait_metric) %>% arrange(desc(mean),.by_group=TRUE)
+
+Imp_rf_rep_summary=Imp_rf_rep_summary  %>% arrange(Trait_metric,desc(mean))
+
+write.csv(Imp_rf_rep_summary,"/home/hugo/Outputs/PhenoxEnv/RF_var_importance_summary.csv",row.names=F)
+```
+
+3/ Figures
+
+#Make Supplementary Figure 10 
+```{r}
+sum_mtry=(df_mtry %>% group_by(mtry) %>% dplyr::summarize(mOOBerror=mean(OOB_error)))
+min=sum_mtry$mtry[sum_mtry$mOOBerror==min(sum_mtry$mOOBerror)]
+
+#Plot mtry
+mtry_plot=sum_mtry %>% ggplot(aes(x=mtry,y=mOOBerror))+geom_point(size=8,shape=18)+ geom_line(size=1.5)+ theme_classic()+ labs(x="mtry value",y="OOB error") + theme(axis.text.x=element_text(size=15,color="black"),axis.text.y=element_text(size=15,color="black"),axis.title.x = element_text(size=15,color="black"),axis.title.y = element_text(size=15,color="black",margin = ggplot2::margin(t = 0, r = 15, b = 0, l = 0)),legend.title = element_text(size=15,color="black"),legend.text = element_text(size=15,color="black"),legend.position ="none",legend.background = element_rect(fill = "transparent"),panel.background = element_rect(colour = "black", size=1.5,fill="white"),plot.background = element_rect(fill = "white",colour = NA)) + geom_vline(xintercept = min,colour="red",linetype="dashed",size=1)
+
+
+#Plot ntree
+ntree_tuning=error_plot2(df_mse,"black") + geom_vline(xintercept = 1000,colour="red",linetype="dashed",size=1)
+
+#Put two plots together 
+tuning_plot=ggdraw() + draw_plot(mtry_plot,x=0,y=0,width=0.5,height=1) + draw_plot(ntree_tuning,x=0.5,y=0,width=0.5,height=1) + draw_plot_label(label=c("a", "b"),x=c(0.0, 0.5),c(1,1),size = 25)
+
+ggsave(tuning_plot,filename=paste0(path,"Hugo/Figures/Phenotype_x_Env/FvFm_ED50_rf_tuning_parameters.png"),width=14,height=8,dpi=320)
+
+```
+
