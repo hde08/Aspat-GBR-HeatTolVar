@@ -28,8 +28,8 @@ library(corrplot)
 
 #Import data
 ```{r}
-path="/data1/Denis/Hugo/"
-df_hyper=read.csv(paste0(path,"Data/GBR_Hyperspec/ECT1_Aspat_Hyperspec_NDVI.csv"),header=T)
+path="Data/"
+df_hyper=read.csv(paste0(path,"ECT1_Aspat_Hyperspec_NDVI.csv"),header=T)
 
 #Exclude genotypes that don't have at least 2 fragments per treatment 
 Gendelete<-df_hyper %>% group_by(Site.name,Genotype) %>%  dplyr::summarise(Ntreatment=n_distinct(Treatment)) %>% subset(Ntreatment<4)
@@ -42,7 +42,7 @@ df_hyper=df_hyper %>% arrange(Site.name,Genotype,Treatment)
 
 #Control effect of fragment sizes 
 ```{r}
-frag_sizes=read.csv(paste0(path,"Data/GBR_Hyperspec/Aspat_fragment_sizes.csv"),header=T)
+frag_sizes=read.csv(paste0(path,"Aspat_fragment_sizes.csv"),header=T)
 #Some missing fragments from hyperspec are removed from the dataset 
 df_hyper2=df_hyper %>% merge(frag_sizes %>% dplyr::select(ID,Npixel),by="ID")
 
@@ -73,7 +73,7 @@ for(m in metric){
   max_lower=0.05
   for(site in unique(df_hyper$Site.name)){
   model.W2.3<-drm(formula, data=df_hyper %>% subset(Site.name==site), curveid = Genotype, fct=W2.3(names = c('hill', 'max', 'ed50')),upperl=c(NA,max_upper,40),lowerl=c(NA,max_lower,30))
-  saveRDS(model.W2.3,file=paste0("/home/hugo/Outputs/NDVI/",site,"_",m,"_W2.3_wconstraint.rds"))
+  saveRDS(model.W2.3,file=paste0("Outputs/NDVI/",site,"_",m,"_W2.3_wconstraint.rds"))
 }
 }
 
@@ -121,7 +121,7 @@ write.csv(model_comp,paste0("Outputs/NDVI/","NDVI_Modelcomparison_AIC.csv"),row.
 df_ed=data.frame()
 for(m in metric){
   for(site in unique(df_hyper$Site.name)){
-    model_W2.3=readRDS(paste0("/home/hugo/Outputs/NDVI/",site,"_",m,"_W2.3_wconstraint.rds"))
+    model_W2.3=readRDS(paste0("Outputs/NDVI/",site,"_",m,"_W2.3_wconstraint.rds"))
     
     ed_W2.3=data.frame(ED(model_W2.3,50,interval="delta")) %>% mutate(Site.name=site,Metric=m)
     
@@ -138,7 +138,7 @@ for(m in metric){
 
 df_param=data.frame()
 for(site in unique(df_filt_info$Site.name)){
-  model_W2.3=readRDS(paste0("/home/hugo/Outputs/NDVI/",site,"_",m,"_W2.3_wconstraint.rds"))
+  model_W2.3=readRDS(paste0("Outputs/NDVI/",site,"_",m,"_W2.3_wconstraint.rds"))
   sum_W2.3=broom::tidy(model_W2.3)
   
   #Reformat into single dataframe 
@@ -150,9 +150,9 @@ for(site in unique(df_filt_info$Site.name)){
 }
 
 colnames(df_ed)[1]="ED50"
-write.csv(df_ed,paste0("/home/hugo/Outputs/NDVI/","NDVI_ED50s.csv",row.names=F))
+write.csv(df_ed,paste0("Outputs/NDVI/","NDVI_ED50s.csv",row.names=F))
 
-write.csv(df_param,paste0("/home/hugo/Outputs/NDVI/","Parameters_W2.3.csv"))
+write.csv(df_param,paste0("Outputs/NDVI/","Parameters_W2.3.csv"))
 
 ```
 
@@ -219,6 +219,6 @@ sum(a$Perc_decline<50)/nrow(a)
 #Save summary of averages per site and treatment
 ```{r}
 sum=df_hyper  %>% group_by(Site.name,Treatment) %>% dplyr::summarise(mNDVI=mean(MeanNDVI)) %>% arrange(Treatment)
-write.xlsx(x=data.frame(sum),file="D:/Hugo/Data/GBR_PAM/NDVI_site_treatment_averages.xlsx",sheetName = "Sheet1")
+#write.xlsx(x=data.frame(sum),file="D:/Hugo/Data/GBR_PAM/NDVI_site_treatment_averages.xlsx",sheetName = "Sheet1")
 ```
 
