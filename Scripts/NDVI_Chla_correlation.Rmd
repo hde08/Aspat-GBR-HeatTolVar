@@ -23,7 +23,8 @@ library(xlsx)
 Chicken : n=30
 Pelorus East : n=20
 ```{r}
-chla=read.csv(paste0(path,"Data/GBR_Physio/Aspath_chla.csv"),header=T)
+path="Data/"
+chla=read.csv(paste0(path,"Aspath_chla.csv"),header=T)
 ```
 
 #Regression between NDVI and Chlorophylle a 
@@ -59,5 +60,5 @@ log_plot2=gphysio %>% group_by(Genotype,Treatment) %>% dplyr::summarise(Chla_per
 
 both_plot=ggdraw() + draw_plot(mplot,x=0,y=0.5,width=0.5,height=0.5) + draw_plot(log_plot,x=0.5,y=0.5,width=0.5,height=0.5) + draw_plot(mplot2,x=0,y=0,width=0.5,height=0.5) + draw_plot(log_plot2,x=0.5,y=0,width=0.5,height=0.5) + draw_plot_label(label=c("a", "b","c","d"),x=c(0.0, 0.50,0,0.5),c(1,1,0.5,0.5),size = 22)
 
-ggsave(both_plot,filename=paste0(path,"Figures/Physio_analysis/NDVI_Chla_correlation.png"),width=12,height=8,dpi=320)
+ggsave(both_plot,filename=paste0("Figures/SupFigure_2.png"),width=12,height=8,dpi=320)
 ```
