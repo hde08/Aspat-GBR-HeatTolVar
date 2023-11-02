@@ -26,7 +26,7 @@ library(memisc)
 
 #Import FvFm data 
 ```{r}
-path="/data1/Denis/Hugo/"
+path="Data/"
 df_filt_info=read.csv(paste0(path,"Data/GBR_PAM/ECT1_Aspat_FvFm.csv"),header=T)
 
 #Remove fragments with qc value = 3 as unaccurate (See supplementary methods)
@@ -50,7 +50,7 @@ FvFm_avgen$Treatment<-factor(FvFm_avgen$Treatment,levels=c("MMM","+3C","+6C","+9
  #Contains meanTemp_hold.adj = the average temperature in each tank during the hold period
  #The values are adjusted to take into account differences in temperature data sources across tanks and sites (probes vs hobbos)
 ```{r}
-temp_tanks=read.csv(paste0(path,"/Data/GBR_Heat_stress/Aspat_tanks_temperature_adj.csv"),header=T)
+temp_tanks=read.csv(paste0(path,"Aspat_tanks_temperature_adj.csv"),header=T)
 temp_tanks$Site_Treatment_Tank=paste(temp_tanks$Site.name,temp_tanks$Treatment,temp_tanks$Tank,sep="_")
 
 df_filt_info$Site_Treatment_Tank=paste(df_filt_info$Site.name,df_filt_info$Treatment,df_filt_info$Tank,sep="_")
@@ -59,7 +59,7 @@ df_filt_info=df_filt_info %>% merge(temp_tanks %>% dplyr::select(Site_Treatment_
 df_filt_info=df_filt_info %>% arrange(Site.name,Genotype,Treatment)
 
 
-sites_data=read.csv(paste0(path,"/Data/GBR_env_data/GBR_Aspat_sites_data.csv"),header=T)
+sites_data=read.csv(paste0(path,"GBR_Aspat_sites_data.csv"),header=T)
 ```
 
 1/ Preliminary tests on FvFm raw measurements
@@ -154,7 +154,7 @@ gendelete_max=comp_max$Genotype[abs(comp_max$mFvFm-comp_max$Estimate)>0.1]
 df_ed=df_ed %>% subset(Term=="ED50" & Model=="W2.3")
 df_ed=df_ed %>% subset(!Genotype %in% gendelete_max )
 colnames(df_ed)[1]="ED50"
-write.csv(df_ed,paste0("/home/hugo/Outputs/FvFm/","EDs_W2.3.csv"))
+write.csv(df_ed,paste0("Outputs/FvFm/","EDs_W2.3.csv"))
 
 df_param=data.frame()
 for(site in unique(df_filt_info$Site.name)){
@@ -169,7 +169,7 @@ for(site in unique(df_filt_info$Site.name)){
   df_param=rbind(df_param,sum_W2.3)
 }
 
-write.csv(df_param,paste0("/home/hugo/Outputs/FvFm/","Parameters_W2.3.csv"))
+write.csv(df_param,paste0("Outputs/FvFm/","Parameters_W2.3.csv"))
 ```
 
 3/ Computation of performance retention
@@ -178,7 +178,7 @@ write.csv(df_param,paste0("/home/hugo/Outputs/FvFm/","Parameters_W2.3.csv"))
 
 #Re-import unfiltered data 
 ```{r}
-df_filt_info=read.csv(paste0(path,"Data/GBR_PAM/ECT1_Aspat_FvFm.csv"),header=T)
+df_filt_info=read.csv(paste0(path,"ECT1_Aspat_FvFm.csv"),header=T)
 df_filt_info=df_filt_info %>% subset(qc!=3)
 
 #Delete genotypes that don't have at least 2 measurements in MMM or MMM+9
@@ -227,7 +227,7 @@ mod <- lm(Ratio_FvFm.adj~MMM_delta,data=FvFm_ratio)
 FvFm_ratio2 <- broom::augment(mod, data = FvFm_ratio) %>%
   mutate(Ratio_FvFm.adj2 = mean(FvFm_ratio$Ratio_FvFm.adj) + .resid)
 
-write.csv(FvFm_ratio2,"D:/Hugo/Data/GBR_PAM/FvFm_ratios_adjusted.csv",row.names=F)
+#write.csv(FvFm_ratio2,"Outputs/FvFm_ratios_adjusted.csv",row.names=F)
 ```
 
 
@@ -245,7 +245,7 @@ sites_log_curve=c("Pelorus East","Fitzroy Island","Moore","No Name","Kelso")
   for(site in sites_log_curve){
     df=df_filt_info %>% subset(Site.name==site)
     
-    model_W2.3=readRDS(paste0("D:/Hugo/Results/GBR_ED50/",site,"_W2.3_wconstraint_v2.rds"))
+    model_W2.3=readRDS(paste0("Outputs/FvFm/",site,"_W2.3_wconstraint_v2.rds"))
     
     newdata=data.frame(conc=rep(seq(min(df$meanTemp_hold.adj),39, length=100),length(colnames(model_W2.3$parmMat))),Genotype=unlist(lapply(colnames(model_W2.3$parmMat), function(x) rep(x,100))))
     pm <- predict(model_W2.3, newdata=newdata,interval="confidence")
@@ -303,7 +303,7 @@ col_legend=ggpubr::get_legend(dummy_plot)
 
   p<-ggdraw() + draw_plot(p,x=0,y=0,width=1,height=1) + draw_plot(col_legend,x=0.8,y=0.8,width=0.2,height=0.2,scale=0.2) + draw_plot(inset,x=0.12,y=0.08,width=0.5,height=0.45)
   
-ggsave(p,filename="D:/Hugo/Figures/GBR_Pheno_Variation/FvFm_metrics_example_colony_level.png",width=12,height=10,dpi=320)
+ggsave(p,filename="Figures/SupFigure_3.png",width=12,height=10,dpi=320)
 
 #Make the same figure per genotype 
 ```
