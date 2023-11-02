@@ -35,17 +35,17 @@ library(RColorBrewer)
 
 
 #Load plotting functions 
-path="/data1/Denis/Hugo/"
-source(paste0(path,"Scripts/heat_tol_variation_plotting_functions.R"))
+path="Data/"
+source(paste0("Scripts/heat_tol_variation_plotting_functions.R"))
 ```
 
 #Read data 
 ```{r}
 #Phenotypic data
-pheno_data=read.csv(paste0(path,"Results/Phenotypic_trait_per_genotype.csv"),header=T)
+pheno_data=read.csv(paste0(path,"Phenotypic_trait_per_genotype.csv"),header=T)
 
 #Sites coordinates and MMM
-sites_data=read.csv(paste0(path,"Data/GBR_env_data/Aspath_sites_data.csv"))
+sites_data=read.csv(paste0(path,"GBR_Aspat_sites_data.csv"))
 
 #Create site color palette, ordered by MMM
 mycolors<-c("#1ba3c6" ,"#2cb5c0" ,"#21B087", "#33a65c" ,"#a2b627" ,"#f8b620", "#f89217", "#f06719","#e03426" ,"#f64971", "#fc719e" , "#ce69be", "#7873c0", "#4f7cba")
@@ -98,7 +98,7 @@ write.csv(df.post.hoc,paste0("D:/Hugo/Results/1st_paper/Levene_posthoc_",m,"_",t
 
 #Games howell posthoc tests
 GH=pheno_data %>% group_by(Trait,Metric) %>% games_howell_test(Value ~ Site.name) %>% arrange(Trait,Metric,p.adj)
-write.csv(GH,"D:/Hugo/Results/1st_paper/GH_posthoc_phenotype.csv",row.names=F)
+#write.csv(GH,"Results/GH_posthoc_phenotype.csv",row.names=F)
 ```
 
 
@@ -153,7 +153,7 @@ write.csv(site_df %>% arrange(Comparison),paste0("Outputs/Site_correlations.csv"
 
 # Make Figure 2
 ```{r}
-source(paste0(path,"Scripts/heat_tol_variation_plotting_functions.R"))
+source(paste0("Scripts/heat_tol_variation_plotting_functions.R"))
 
 #Barplot
 p1=heattol_boxplot(pheno_data %>% subset(Trait=="FvFm" & Metric=="ED50"),"Value","Fv/Fm ED50 (°C)",15,34,40,34,40,2,element_blank(),element_blank(),element_blank())
@@ -311,7 +311,7 @@ adj_density_plot2=ed50_adj %>% ggplot(aes(ed50.ndvi_adj)) +
 
 all_plots=ggdraw() +draw_plot(adj_density_plot1,x=0.0,y=0.0,width=0.5,height=1)+  draw_plot(adj_density_plot2,x=0.50,y=0.0,width=0.5,height=1) + draw_plot_label(label=c("a", "b"),x=c(0.0,0.5),c(1, 1),size = 22)
 
-ggsave(all_plots,filename="Figures/Supplementary_Fig4.png",width=12,height=6,dpi=320)
+ggsave(all_plots,filename="Figures/SupFigure_4.png",width=12,height=6,dpi=320)
 ```
 
 
