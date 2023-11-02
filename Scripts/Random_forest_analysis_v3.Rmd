@@ -33,22 +33,22 @@ library(caret)
 library(party)
 
 #Load custom functions 
-path="/data1/Denis/"
+path="Data/"
 source(paste0(path,"Hugo/Scripts/cforest_plotting_functions.R"))
 ```
 
 #Load the data
 ```{r}
 #Env data
-colony_env_wide_red=read.csv(paste0(path,"Hugo/Data/GBR_env_data/ECT1_Aspat_colonies_environmental_data_uncor_v3_0.7.csv"),header=T)
+colony_env_wide_red=read.csv(paste0(path,"ECT1_Aspat_colonies_environmental_data_uncor_v3_0.7.csv"),header=T)
 
-colony_env_wide_all=read.csv(paste0(path,"Hugo/Data/GBR_env_data/ECT1_Aspat_colonies_environmental_data_24metrics.csv"),header=T)
+colony_env_wide_all=read.csv(paste0(path,"ECT1_Aspat_colonies_environmental_data_24metrics.csv"),header=T)
 
-pheno_data=read.csv(paste0(path,"Hugo/Results/Phenotypic_trait_per_genotype.csv"),header=T)
+pheno_data=read.csv(paste0(path,"Phenotypic_trait_per_genotype.csv"),header=T)
 #Exclude St Crispin from ED50 values
 pheno_data=pheno_data %>% subset(Metric!="ED50" | Site.name!="St Crispin")
 
-sites_data=read.csv(paste0(path,"Hugo/Data/GBR_env_data/Aspath_sites_data.csv"))
+sites_data=read.csv(paste0(path,"GBR_Aspat_sites_data.csv"))
 colnames(sites_data)[1]="Reef.Name"
 sites_data=sites_data %>% subset(Reef.Name %in% pheno_data$Site.name)
 
@@ -118,7 +118,7 @@ for(j in 1:10){
     }
 }
 
-write.csv(df_mtry,"/home/hugo/Outputs/RF_mtry_tuning.csv",row.names=F)
+write.csv(df_mtry,"Outputs/RF_mtry_tuning.csv",row.names=F)
 ```
 
 
@@ -138,7 +138,7 @@ for(i in seq(1,2000,length.out=100)){
   df_mse=rbind(df_mse,data.frame(Ntree=i,MSE=MSE))
 }
 
-write.csv(df_mse,"/home/hugo/Outputs/RF_ntree_tuning.csv",row.names=F)
+write.csv(df_mse,"/Outputs/RF_ntree_tuning.csv",row.names=F)
 ```
 
 2/ Run RF models 
@@ -194,8 +194,8 @@ party::cforest_unbiased(ntree=1000,mtry=min(length(attr(terms(x), "term.labels")
 }
 
 
-write.csv(Imp_rf_rep,"/home/hugo/Outputs/PhenoxEnv/RF_var_importance_scaled.csv",row.names=F)
-write.csv(Pred_accuracy,"/home/hugo/Outputs/PhenoxEnv/RF_var_pred_accuracy_scaled.csv",row.names=F)
+write.csv(Imp_rf_rep,"Outputs/PhenoxEnv/RF_var_importance_scaled.csv",row.names=F)
+write.csv(Pred_accuracy,"Outputs/PhenoxEnv/RF_var_pred_accuracy_scaled.csv",row.names=F)
 
 Imp_rf_rep_summary=Imp_rf_rep %>% mutate(Trait_metric=paste0(Trait,"_",Metric)) %>% group_by(Trait_metric,Variable) %>%
   dplyr::summarise(mean = mean(Varimp), sd = sd(Varimp), n = n(),lower=Rmisc::CI(Varimp, ci=0.95)[3],upper=Rmisc::CI(Varimp, ci=0.95)[1],q1=quantile(Varimp)[2],q3=quantile(Varimp)[4],median=median(Varimp),IQ=q3-q1,min=q1-1.5*IQ,max=q3+1.5*IQ) %>%
@@ -223,7 +223,7 @@ ntree_tuning=error_plot2(df_mse,"black") + geom_vline(xintercept = 1000,colour="
 #Put two plots together 
 tuning_plot=ggdraw() + draw_plot(mtry_plot,x=0,y=0,width=0.5,height=1) + draw_plot(ntree_tuning,x=0.5,y=0,width=0.5,height=1) + draw_plot_label(label=c("a", "b"),x=c(0.0, 0.5),c(1,1),size = 25)
 
-ggsave(tuning_plot,filename=paste0(path,"Hugo/Figures/Phenotype_x_Env/FvFm_ED50_rf_tuning_parameters.png"),width=14,height=8,dpi=320)
+ggsave(tuning_plot,filename=paste0("Figures/Phenotype_x_Env/SupFigure_10.png"),width=14,height=8,dpi=320)
 
 ```
 
