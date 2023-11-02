@@ -20,7 +20,7 @@ library(cowplot)
 
 #Import data
 ```{r}
-path="/home/hugo/Outputs/PhenoxEnv/"
+path="Outputs/PhenoxEnv/"
 
 #Import random forest results
 Imp_rf_rep=read.csv(paste0(path,"RF_var_importance_scaled.csv"),header=T)
@@ -111,16 +111,6 @@ heatmap=ggplot(data = data, aes(x=Trait_metric,y=term)) +
   theme(legend.key.size = unit(1, 'cm')) +
   scale_size_continuous(range = c(5,17)) +geom_text(aes(x=Trait_metric,y=13,label=R2lab,fontface=2),data=Pred,angle=45,size=7,hjust=0.2,parse = TRUE) +
   coord_equal(clip="off")
-
-#Add R2 value above plot
-#Highlight in bold certain variables
-#Edit the legend on the side 
-#Put maps on the right 
-#Reorder the different variables 
-#Put 2 as exponent
-# 
-path="/data1/Denis/Hugo/"
-ggsave(heatmap,filename=paste0(path,"Figures/Phenotype_x_Env/Ridge_global_plot_v3.png"),width=16,height=14,dpi=320)
 ```
 
 #Make site maps of important predictors -> extract it from Coral Reef Watch 
@@ -212,6 +202,6 @@ DHW_TSA_Freq_sup4_map<-ggplot() +
 global_plot=ggdraw() +draw_plot(heatmap,x=0,y=0,width=0.5,height=1)+  draw_plot(MMM_map,x=0.47,y=0.5,width=0.25,height=0.5) +  draw_plot(AR_map,x=0.47,y=0,width=0.25,height=0.5)+  draw_plot(DHW_collec_map,x=0.72,y=0.5,width=0.25,height=0.5)+  draw_plot(DHW_TSA_Freq_sup4_map,x=0.72,y=0,width=0.25,height=0.5)+ 
   theme(plot.background = element_rect(fill="white", color = NA))+ draw_plot_label(label=c("a", "b","c","d","e"),x=c(0.05,0.465,0.465,0.715,0.715),c(1, 1,0.5,1,0.5),size = 30)
 
-ggsave(global_plot,filename=paste0(path,"/Figures/Phenotype_x_Env/Figure_5_v4.png"),width=18.5,height=12,dpi=400)
+ggsave(global_plot,filename=paste0(path,"Figures/Figure_5.png"),width=18.5,height=12,dpi=400)
 ```
 
