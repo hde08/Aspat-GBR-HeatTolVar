@@ -11,20 +11,21 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Import individual trait and metric files  
 ```{r}
-sites_data=read.csv(paste0(path,"/Data/GBR_env_data/GBR_Aspat_sites_data.csv"),header=T)
+path="Data"
+sites_data=read.csv(paste0(path,"/GBR_Aspat_sites_data.csv"),header=T)
 
 
-FvFm_ratio=read.csv(paste0(path,"/Data/GBR_PAM/FvFm_ratios_adjusted.csv"),header=T)
+FvFm_ratio=read.csv(paste0("Outputs/FvFm_ratios_adjusted.csv"),header=T)
 FvFm_ratio$Ratio_FvFm.adj=FvFm_ratio$Ratio_FvFm.adj2
 
 
 
-FvFm_ed50=read.csv(paste0(path,"Data/GBR_PAM/FvFm_ED50s_drc_withqc.csv"),header=T)
+FvFm_ed50=read.csv(paste0("Outputs/FvFm/EDs_W2.3.csv"),header=T)
 
-Hyperspec_ed50=read.csv(paste0(path,"Results/GBR_ED50/EDs_Hyperspec_W2.3.csv"),header=T)
+Hyperspec_ed50=read.csv(paste0("Outputs/NDVI/NDVI_ED50.csv"),header=T)
 Hyperspec_ed50$CI=Hyperspec_ed50$Upper-Hyperspec_ed50$Lower
 
-Hyperspec_ratio=read.csv(paste0(path,"Data/GBR_Hyperspec/NDVI_ratios_adjusted.csv"),header=T)
+Hyperspec_ratio=read.csv(paste0"Outputs/NDVI/NDVI_ratios_adjusted.csv"),header=T)
 Hyperspec_ratio$Ratio_NDVI.adj=Hyperspec_ratio$Ratio_NDVI.adj2
 ```
 
