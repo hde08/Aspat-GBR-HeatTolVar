@@ -16,6 +16,8 @@
 
 8/ GBR_Aspat_sites_data.csv > Summary of GBR 14 reef sites conditions (including coordinates and MMM)
 
-9/ RRAP 2022 field data sheets_Feb-Mar_colony.csv > Individual colony metadata for the 767 A.spathulata colonies samples on the GBR (including lon, lat, health.score, depth, corrected depth)
+9/ Phenotypic_trait_per_genotype.csv > Summary of thermal tolerance metrics (Fv/Fm and NDVi ED50 and performance retention) for all colonies. 
 
-10 / tide_data_ECT1_v3.csv > BOM tide data extracted using https://www.willyweather.com.au/ for the 14 GBR reef sites at the time of collection to standardized colonies depths to LAT
+10/ RRAP 2022 field data sheets_Feb-Mar_colony.csv > Individual colony metadata for the 767 A.spathulata colonies samples on the GBR (including lon, lat, health.score, depth, corrected depth)
+
+11 / tide_data_ECT1_v3.csv > BOM tide data extracted using https://www.willyweather.com.au/ for the 14 GBR reef sites at the time of collection to standardized colonies depths to LAT
