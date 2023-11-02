@@ -22,15 +22,16 @@ library(cowplot)
 
 #Import data 
 ```{r}
-colony_env_wide_red=read.csv(paste0(path,"Hugo/Data/GBR_env_data/ECT1_Aspat_colonies_environmental_data_uncor_v3_0.7.csv"),header=T)
+path="Data/"
+colony_env_wide_red=read.csv(paste0(path,"/ECT1_Aspat_colonies_environmental_data_uncor_v3_0.7.csv"),header=T)
 
-colony_env_wide_all=read.csv(paste0(path,"Hugo/Data/GBR_env_data/ECT1_Aspat_colonies_environmental_data_24metrics.csv"),header=T)
+colony_env_wide_all=read.csv(paste0(path,"/ECT1_Aspat_colonies_environmental_data_24metrics.csv"),header=T)
 
-pheno_data=read.csv(paste0(path,"Hugo/Results/Phenotypic_trait_per_genotype.csv"),header=T)
+pheno_data=read.csv(paste0(path,"Phenotypic_trait_per_genotype.csv"),header=T)
 #Exclude St Crispin from ED50 values
 pheno_data=pheno_data %>% subset(Metric!="ED50" | Site.name!="St Crispin")
 
-sites_data=read.csv(paste0(path,"Hugo/Data/GBR_env_data/Aspath_sites_data.csv"))
+sites_data=read.csv(paste0(path,"GBR_Aspat_sites_data.csv"))
 colnames(sites_data)[1]="Reef.Name"
 sites_data=sites_data %>% subset(Reef.Name %in% pheno_data$Site.name)
 
@@ -115,17 +116,17 @@ for(x in unique(pheno_data_env$Trait_metric)){
 }
 
 #Save the different results
-write.csv(ridge_coeff,"/home/hugo/Outputs/Ridge_reg_coeff_bootstrap.csv",row.names=F)
-write.csv(ridge_rsq,"/home/hugo/Outputs/Ridge_reg_Rsq_bootstrap.csv",row.names=F)
-write.csv(coeff_df,"/home/hugo/Outputs/Ridge_reg_plot_coeff.csv",row.names=F)
-write.csv(cv_df,"/home/hugo/Outputs/Ridge_reg_plot_lambda.csv",row.names=F)
+write.csv(ridge_coeff,"Outputs/Ridge_reg_coeff_bootstrap.csv",row.names=F)
+write.csv(ridge_rsq,"Outputs/Ridge_reg_Rsq_bootstrap.csv",row.names=F)
+write.csv(coeff_df,"Outputs/Ridge_reg_plot_coeff.csv",row.names=F)
+write.csv(cv_df,"Outputs/Ridge_reg_plot_lambda.csv",row.names=F)
 
 #Save summary of the results 
 sum_ridge=ridge_coeff %>% group_by(Trait_metric,term) %>%
   dplyr::summarise(mean = mean(estimate), sd = sd(estimate), n = n(),lower=Rmisc::CI(estimate, ci=0.95)[3],upper=Rmisc::CI(estimate, ci=0.95)[1],q1=quantile(estimate)[2],q3=quantile(estimate)[4],median=median(estimate),IQ=q3-q1,min=q1-1.5*IQ,max=q3+1.5*IQ) %>%
   ungroup() %>% group_by(Trait_metric) %>% arrange(desc(mean),.by_group=TRUE)
 
-write.csv(sum_ridge,"/home/hugo/Outputs/Ridge_reg_coeff_bootstrap_summary.csv",row.names=F)
+write.csv(sum_ridge,"Outputs/Ridge_reg_coeff_bootstrap_summary.csv",row.names=F)
 ```
 
 
@@ -148,7 +149,7 @@ lambda_plot=cv_df %>% ggplot(aes(x=log(lambda),y=mse)) + geom_point(size=3,aes(c
           panel.background = element_rect(colour = "black", size=1.5),strip.background =element_rect(fill="white"),strip.text = element_text(colour = 'black',size=15))+ guides(colour = guide_legend(override.aes = list(size=3))) + scale_colour_manual(values = metric_colors,name="Phenotypic traits",labels=c("Fv/Fm ED50","NDVI ED50","Fv/Fm Ratio","NDVI Ratio"))
 
 
-ggsave(lambda_plot,filename=paste0(path,"Hugo/Figures/Phenotype_x_Env/lambda_choice_red_scaled_v2.png"),width=14,height=10,dpi=320)
+ggsave(lambda_plot,filename=paste0("Figures/SupFigure_11.png"),width=14,height=10,dpi=320)
 
 ```
 
@@ -168,7 +169,7 @@ coeff_plot=coeff_df %>% merge(cv_df %>% dplyr::select(Trait_metric,lambda.1se) %
     )
 
 
-ggsave(coeff_plot,filename=paste0(path,"Hugo/Figures/Phenotype_x_Env/coeff_lambda_plot_red_scaled_v2.png"),width=14,height=10,dpi=320)
+ggsave(coeff_plot,filename=paste0("/Figures/SupFigure_12.png"),width=14,height=10,dpi=320)
 ```
 
 #Plots parameter coefficients by types of variables
@@ -233,6 +234,6 @@ mbar4=mybarplot_group(sum_ridge,"NDVI_Ratio","NDVI +9C/MMM","#66CCCC") + scale_y
 
 one_ridgeplot=ggdraw() +draw_plot(mbar1,x=0.0,y=0.78,width=1,height=0.22)+draw_plot(mbar2,x=0.0,y=0.56,width=1,height=0.22) +draw_plot(mbar3,x=0.0,y=0.34,width=1,height=0.22) +draw_plot(mbar4,x=0.0,y=0.0,width=1,height=0.34) + draw_plot_label(label=c("a", "b","c","d"),x=c(0.0,0.,0,0.),c(1,0.78,0.56,0.34),size = 25)
 
-ggsave(one_ridgeplot,filename=paste0(path,"Hugo/Figures/Phenotype_x_Env/Ridge_coeffs_all_red_test_wMMM_v2.png"),width=18,height=20,dpi=320)
+ggsave(one_ridgeplot,filename=paste0("Figures/SupFigure_13.png"),width=18,height=20,dpi=320)
 ```
 
