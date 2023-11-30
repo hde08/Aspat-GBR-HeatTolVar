@@ -48,7 +48,7 @@ FvFm_avgen$Treatment<-factor(FvFm_avgen$Treatment,levels=c("MMM","+3C","+6C","+9
 
 #Import temperature data and site data 
  #Contains meanTemp_hold.adj = the average temperature in each tank during the hold period
- #The values are adjusted to take into account differences in temperature data sources across tanks and sites (probes vs hobbos)
+ #The values are adjusted to take into account differences in temperature data sources across tanks and sites (probes vs HOBO)
 ```{r}
 temp_tanks=read.csv(paste0(path,"Aspat_tanks_temperature_adj.csv"),header=T)
 temp_tanks$Site_Treatment_Tank=paste(temp_tanks$Site.name,temp_tanks$Treatment,temp_tanks$Tank,sep="_")
