@@ -1,4 +1,4 @@
-#Functions revisited for ploting phenotypic variation
+#Functions revisited for plotting phenotypic variation
 
 #Add the MMM value below 
 
