@@ -9,12 +9,6 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## This script is the re-Analysis of environmental data at ECT1 sites
-## For A.spathulata data after re-extracion of environmental variables from
-#various sources at the colony level when available 
-
-#Think about incorporating PCAtest
-
 ```{r,include=F}
 library(dplyr)
 library(stringr)
