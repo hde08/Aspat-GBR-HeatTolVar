@@ -1,4 +1,4 @@
-Reef.name;Site name;Collection date;Genotype;Depth;Time;Health Chart;Tide_adjust;Depth_corrected;Lat;Lon;eventID
+﻿Reef.name;Site name;Collection date;Genotype;Depth;Time;Health Chart;Tide_adjust;Depth_corrected;Lat;Lon;eventID
 Hicks;Hicks;28/02/2022;426;5.6;28/02/2022 09:36;C3;2.39257707424552;3.2;-14.475094;145.502542;Aspat_426
 Hicks;Hicks;28/02/2022;427;5.8;28/02/2022 09:37;C3;2.38726616181098;3.4;-14.475117;145.502517;Aspat_427
 Hicks;Hicks;28/02/2022;428;4.4;28/02/2022 09:48;C3;2.32560812841974;2.1;-14.47508;145.502557;Aspat_428
