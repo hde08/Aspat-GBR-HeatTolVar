@@ -66,6 +66,16 @@
   -Value : Estimate   
   -CI : Confidence intervall width (95%)  
 
-10/ __ECT1_Aspat_field_data.csv__ > Individual colony metadata for the 767 A.spathulata colonies samples on the GBR (including lon, lat, health.score, depth, corrected depth)  
+10/ __ECT1_Aspat_field_data.csv__ > Individual colony metadata for the 767 A.spathulata colonies samples on the GBR  
+  -Lat : Latitude  
+  -Lon : Longitude  
+  -Depth : Colony depth (measured using dive computer)  
+  -Tide_adjust : Tide level at the time of collection  
+  -Depth_corrected : Depth standardized to LAT  
+  -Health chart : Pigmentation at the time of collection measured using Coral health chart   
 
-11 / __tide_data_ECT1_v3.csv__ > BOM tide data extracted using https://www.willyweather.com.au/ for the 14 GBR reef sites at the time of collection to standardized colonies depths to LAT  
+11 / __tide_data_ECT1_v3.csv__ > BOM tide data extracted using https://www.willyweather.com.au/ for the 14 GBR reef sites at the time of collection to standardized colonies depths to LAT    
+  -Collection date : Date and time of collection  
+  -Closest tide station : Closest BOM station  
+  -Time1-4 : Time of high/low tides  
+  -Level1-4 : Tide levels at high/low tides   
