@@ -25,6 +25,8 @@
   -mFvFm : Fragment mean Fv/Fm
   
 5/ __ECT1_Aspat_Hyperspec_NDVI.csv__ > Raw NDVI measurements for individual coral fragments  
+  -MeanNDVI : Fragment mean NDVI  
+  -StdNDVI : Fragment NDVI standard deviation
 
 6/ __ECT1_Aspat_colonies_environmental_data_24metrics.csv__ > Colony-level environmental predictors preliminary considered in the analyses  
 
