@@ -1,4 +1,4 @@
-**Description of files content :** 
+![image](https://github.com/hde08/GBR-HeatTolVar-GCB/assets/148919113/671d0434-5abe-47a8-9c72-5c72d6bdc3bb)**Description of files content :** 
 
 1/ __Aspat_fragment_sizes.csv__ > Estimation of individual fragments sizes using number of pixels on 2D images  
   -ID : Fragment ID    
@@ -28,7 +28,31 @@
   -MeanNDVI : Fragment mean NDVI  
   -StdNDVI : Fragment NDVI standard deviation
 
-6/ __ECT1_Aspat_colonies_environmental_data_24metrics.csv__ > Colony-level environmental predictors preliminary considered in the analyses  
+6/ __ECT1_Aspat_colonies_environmental_data_24metrics.csv__ > Colony-level environmental predictors preliminary considered in the analyses    
+  -LMM	:	Minimum monthly mean   
+  -OM	:	Overall mean  
+  -OMsd	:	Overall standard deviation  
+  -AR	:	Average Annual range  
+  -ROTC_ss	:	Average Rate of temperature change (spring-summer)  
+  -MMM	:	Maximum monthly mean (adjusted to historical baseline)  
+  -TSA_DHW_stdev	:	Degree Heating weeks standard deviation   
+  -DHW_freq_sup4	:	Average frequency of Degree Heating weeks above 4  
+  -DHW_freq_sup8	:	Average frequency of Degree Heating weeks above 8  
+  -DHW_max	:	Maximum Degree Heating weeks  
+  -DHW_freq_sup4_1year	:	Frequency of Degree Heating weeks above 4 during the year prior to collection  
+  -DHW_freq_sup4_6year	:	Frequency of Degree Heating weeks above 4 since 2016  
+  -DHW_collection	:	Degree Heating weeks at the time of collection (2022 Field Trip)  
+  -Depth	:	Colonies depth (adjusted to LAT using BOM tides data)  
+  -Health.score	:	https://coralwatch.org/product/coral-health-chart/  
+  -CF_OM	:	Cloud Fraction overall mean (% of pixel covered by clouds)  
+  -CF_ss	:	Cloud Fraction summer-spring mean (% of pixel covered by clouds)  
+  -CF30a	:	Cloud Fraction anomaly for the 30 days prior to collection  
+  -Chl_a_OM	:	Chlorophylle A Overall Mean  
+  -Kd_490_OM	:	Vertical attenuation at 490nm Overall Mean  
+  -Oxygen_OM	:	Dissolved Oxygen Overall Mean  
+  -PIP_OM	:	Particulate Inorganic Phosphorus Overall Mean  
+  -TOTAL_N_OM	:	Total Nitrogen Overall Mean  
+  -Velocity_OM	:	Total current Overall Mean  
 
 7/ __ECT1_Aspat_colonies_environmental_data_uncor_v3_0.7.csv__ > 12 Colony-level environmental predictors with low to moderate pairwise correlation (R<0.7) used in Phenotype x Env analyses  
 
