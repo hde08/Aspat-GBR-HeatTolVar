@@ -9,14 +9,14 @@ Chla_per_dw : Fragment chla content standardized to dry weight (g/g dw)
 MeanNDVI : Fragment mean NDVI value computed from hyperspectral measurements 
 
 3/ Aspath_tanks_temperature_adj.csv > Temperature summary for each tank and each experiment run at the 14 different reef sites
-maxTemp : Maximum temperature reached during the run
-minTemp : Minimum temperature reached during the run
-meanTemp_run : Mean temperature during the run
-meanTemp_hold : Mean temperature during the 3h-hold period (see Mat & Met section for details on temperature profiles)
-sdTemp_hold : Standard deviation of temperature during the 3h-hold period
-Source : Source of temperature data for that tank (HOBO logger or resistance probe)
-meanTemp_hold.adj : Mean temperature during the 3h-hold period adjusted to account for calibration differences between HOBO and probes
-maxTemp.adj : Maximum temperature during the run adjusted to account for calibration differences between HOBO and probes
+  -maxTemp : Maximum temperature reached during the run
+  -minTemp : Minimum temperature reached during the run
+  -meanTemp_run : Mean temperature during the run
+  -meanTemp_hold : Mean temperature during the 3h-hold period (see Mat & Met section for details on temperature profiles)
+  -sdTemp_hold : Standard deviation of temperature during the 3h-hold period
+  -Source : Source of temperature data for that tank (HOBO logger or resistance probe)
+  -meanTemp_hold.adj : Mean temperature during the 3h-hold period adjusted to account for calibration differences between HOBO and probes
+  -maxTemp.adj : Maximum temperature during the run adjusted to account for calibration differences between HOBO and probes
 
 4/ ECT1_Aspat_FvFm.csv > Raw FvFm measurements for individual coral fragments
 
