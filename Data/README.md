@@ -56,7 +56,9 @@
 
 7/ __ECT1_Aspat_colonies_environmental_data_uncor_v3_0.7.csv__ > 12 Colony-level environmental predictors with low to moderate pairwise correlation (R<0.7) used in Phenotype x Env analyses  
 
-8/ __GBR_Aspat_sites_data.csv__ > Summary of GBR 14 reef sites conditions (including coordinates and MMM)  
+8/ __GBR_Aspat_sites_data.csv__ > Summary of GBR 14 reef sites conditions (including coordinates and MMM)      
+  -GBRMPA.zoning : Reef zoning retrieved from Great Barrier Reef Marine Park Authority https://www2.gbrmpa.gov.au/access/zoning/eye-on-the-reef-app  
+  -Km_to_coastline : Shortest distance to shore (km, haversine distance)
 
 9/ __Phenotypic_trait_per_genotype.csv__ > Summary of thermal tolerance metrics (Fv/Fm and NDVi ED50 and performance retention) for all colonies     
 
