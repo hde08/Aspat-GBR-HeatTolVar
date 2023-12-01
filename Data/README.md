@@ -1,12 +1,12 @@
 **Description of files content :** 
 
 1/ Aspat_fragment_sizes.csv > Estimation of individual fragments sizes using number of pixels on 2D images
-ID : Fragment ID  
-Npixel : 2D Fragment size (in number of pixels)  
+  -ID : Fragment ID    
+  -Npixel : 2D Fragment size (in number of pixels)  
 
 2/ Aspath_chla.csv > Individual fragments chlorophyll a content (see 'Validation of chlorophyll measurements from hyperspectral imaging' in supplementary materials)
-Chla_per_dw : Fragment chla content standardized to dry weight (g/g dw)   
-MeanNDVI : Fragment mean NDVI value computed from hyperspectral measurements   
+  -Chla_per_dw : Fragment chla content standardized to dry weight (g/g dw)     
+  -MeanNDVI : Fragment mean NDVI value computed from hyperspectral measurements     
 
 3/ Aspath_tanks_temperature_adj.csv > Temperature summary for each tank and each experiment run at the 14 different reef sites
   -maxTemp : Maximum temperature reached during the run  
