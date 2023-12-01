@@ -60,7 +60,11 @@
   -GBRMPA.zoning : Reef zoning retrieved from Great Barrier Reef Marine Park Authority https://www2.gbrmpa.gov.au/access/zoning/eye-on-the-reef-app  
   -Km_to_coastline : Shortest distance to shore (km, haversine distance)
 
-9/ __Phenotypic_trait_per_genotype.csv__ > Summary of thermal tolerance metrics (Fv/Fm and NDVi ED50 and performance retention) for all colonies     
+9/ __Phenotypic_trait_per_genotype.csv__ > Summary of thermal tolerance metrics (Fv/Fm and NDVi ED50 and performance retention) for all colonies  
+  -Metric : Heat tolerance metric (ED50 or performance retention = Ratio)
+  -Trait : Phenotypic trait (Fv/Fm or chlorophyll = NDVI)
+  -Value : Estimate 
+  -CI : Confidence intervall width (95%)
 
 10/ __ECT1_Aspat_field_data.csv__ > Individual colony metadata for the 767 A.spathulata colonies samples on the GBR (including lon, lat, health.score, depth, corrected depth)  
 
