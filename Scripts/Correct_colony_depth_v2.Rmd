@@ -34,7 +34,7 @@ Sys.setlocale(locale = "C")
 ```{r}
 #Colony data
 path="Data/"
-colonies_metadata<-read.csv(file=paste0(path,"RRAP 2022 field data sheets_Feb-Mar_colony.csv"),header=T,check.names = F)
+colonies_metadata<-read.csv(file=paste0(path,"ECT1_Aspat_field_data.csv"),header=T,check.names = F)
 
 #Tide data
 tide_data<-read.csv(paste0(path,"tide_data_ECT1_v3.csv"),header=T,sep=";",dec=".",check.names=F)
@@ -94,7 +94,7 @@ for(i in 1:nrow(colonies_metadata)){
 colonies_metadata$Depth_corrected=round(colonies_metadata$Depth-colonies_metadata$Tide_adjust,1)
 
 #Save as csv with the new column 
-write.csv(colonies_metadata %>% dplyr::select(-c(Time1:Level4)),paste0(path,"RRAP 2022 field data sheets_Feb-Mar_colony.csv"),row.names = F)
+write.csv(colonies_metadata %>% dplyr::select(-c(Time1:Level4)),paste0(path,"ECT1_Aspat_field_data.csv"),row.names = F)
 
 ```
 
