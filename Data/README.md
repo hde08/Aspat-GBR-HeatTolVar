@@ -1,4 +1,4 @@
-![image](https://github.com/hde08/GBR-HeatTolVar-GCB/assets/148919113/671d0434-5abe-47a8-9c72-5c72d6bdc3bb)**Description of files content :** 
+**Description of files content :** 
 
 1/ __Aspat_fragment_sizes.csv__ > Estimation of individual fragments sizes using number of pixels on 2D images  
   -ID : Fragment ID    
