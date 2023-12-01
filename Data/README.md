@@ -18,11 +18,11 @@
   -meanTemp_hold.adj : Mean temperature during the 3h-hold period adjusted to account for calibration differences between HOBO and probes  
   -maxTemp.adj : Maximum temperature during the run adjusted to account for calibration differences between HOBO and probes  
 
-4/ __ECT1_Aspat_FvFm.csv__ > Raw FvFm measurements for individual coral fragments 
+4/ __ECT1_Aspat_FvFm.csv__ > Raw FvFm measurements for individual coral fragments   
   -F1-F3 : F0 measurements across 3 fragment areas  
   -Fm1-3 : Fm measurements across 3 fragment areas  
   -Fv/Fm1-3 : Fv/Fm measurements across 3 fragment areas  
-  -mFvFM : Fragment mean Fv/Fù
+  -mFvFm : Fragment mean Fv/Fm
   
 5/ __ECT1_Aspat_Hyperspec_NDVI.csv__ > Raw NDVI measurements for individual coral fragments  
 
