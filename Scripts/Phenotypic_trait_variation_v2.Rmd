@@ -71,6 +71,9 @@ medians=pheno_data %>% group_by(Site.name,Metric,Trait) %>% dplyr::summarise(med
 pheno_data=pheno_data %>% mutate(Site_Trait_Met=paste(Site.name,Trait,Metric,sep="_")) %>% merge(medians %>% mutate(Site_Trait_Met=paste(Site.name,Trait,Metric,sep="_"), by="Site_Trait_Met"))
 pheno_data$residuals <- abs(pheno_data$Value - pheno_data$median)
 
+#Define omega squared functions
+omega.squared <- function(WelchF, df, N) df * (WelchF - 1) / (df * (WelchF - 1) + N)
+
 #Perform leveneTest
 df_omega=data.frame()
 for(t in unique(pheno_data$Trait)){
