@@ -4,7 +4,7 @@
 
 **The authors would appreciate being notified if you intend to use these data or analyses in your own work**
 
-title 
+### Quantifying the thermal thresholds of individual corals reveals widespread variation in heat tolerance traits across the Great Barrier Reef 
 
 Authors
 Hugo Denis1,2,3, Line K. Bay4, Véronique Mocellin4, Melissa Naugle3, Gaël Lecellier 1,5, Steven W. Purcell3, Véronique Berteaux-Lecellier 1, Emily J. Howells3
