@@ -7,7 +7,7 @@
 ### Quantifying the thermal thresholds of individual corals reveals widespread variation in heat tolerance traits across the Great Barrier Reef 
 
 Authors
-Hugo Denis</sup>1,2,3</sup>, Line K. Bay</sup>4</sup>, Véronique Mocellin</sup>4</sup>, Melissa Naugle</sup>3</sup>, Gaël Lecellier</sup>1,5</sup>, Steven W. Purcell</sup>3</sup>, Véronique Berteaux-Lecellier</sup>1</sup>, Emily J. Howells</sup>3</sup>
+Hugo Denis<sup>1,2,3</sup>, Line K. Bay<sup>4</sup>, Véronique Mocellin<sup>4</sup>, Melissa Naugle<sup>3</sup>, Gaël Lecellier<sup>1,5</sup>, Steven W. Purcell<sup>3</sup>, Véronique Berteaux-Lecellier<sup>1</sup>, Emily J. Howells<sup>3</sup>
 
 1 UMR250/9220 ENTROPIE (IRD-CNRS-UR-IFREMER-UNC), Promenade Roger-Laroque, Noumea cedex, New Caledonia, France.   
 2 ED 129, SU Sorbonne Université, 4, Place Jussieu, 75252 Paris, France   
