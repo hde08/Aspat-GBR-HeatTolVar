@@ -61,8 +61,8 @@
   -Km_to_coastline : Shortest distance to shore (km, haversine distance)
 
 9/ __Phenotypic_trait_per_genotype.csv__ > Summary of thermal tolerance metrics (Fv/Fm and NDVi ED50 and performance retention) for all colonies  
-  -Metric : Heat tolerance metric (ED50 or performance retention = Ratio)  
-  -Trait : Phenotypic trait (Fv/Fm or chlorophyll = NDVI)  
+  -Metric : Heat tolerance metric (ED50 or performance retention)  
+  -Trait : Phenotypic trait (Fv/Fm or NDVI)  
   -Value : Estimate   
   -CI : Confidence intervall width (95%)  
 
