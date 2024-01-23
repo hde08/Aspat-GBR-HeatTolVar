@@ -2,7 +2,7 @@
 
 1/ __Aspat_fragment_sizes.csv__ > Estimation of individual fragments sizes using number of pixels on 2D images  
   -ID : Fragment ID    
-  -Npixel : 2D Fragment size (in number of pixels)  
+  -Npixel : 2D Fragment size (number of pixels)  
 
 2/ __Aspath_chla.csv__ > Individual fragments chlorophyll a content (see 'Validation of chlorophyll measurements from hyperspectral imaging' in supplementary materials)  
   -Chla_per_dw : Fragment chla content standardized to dry weight (g/g dw)     
