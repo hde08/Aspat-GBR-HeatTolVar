@@ -8,7 +8,7 @@
   -Chla_per_dw : Fragment chla content standardized to dry weight (g/g dw)     
   -MeanNDVI : Fragment mean NDVI value computed from hyperspectral measurements     
 
-3/ __Aspath_tanks_temperature_adj.csv__ > Temperature summary for each tank and each experiment run at the 14 different reef sites  
+3/ __Aspath_tanks_temperature_adj.csv__ > Temperature summary for each assay and experimental tank at the 14 different reef sites  
   -maxTemp : Maximum temperature reached during the run  
   -minTemp : Minimum temperature reached during the run  
   -meanTemp_run : Mean temperature during the run  
