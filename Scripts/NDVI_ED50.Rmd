@@ -1,6 +1,6 @@
 ---
 title: "Hyperspec_data_analysis"
-author: "Hugo DENIS"
+author: "XXX"
 date: "2022-12-01"
 output: html_document
 ---
