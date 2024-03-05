@@ -1,6 +1,6 @@
 ---
 title: "Ridge regression"
-author: "Hugo DENIS"
+author: "XXX"
 date: "2023-01-27"
 output: html_document
 ---
