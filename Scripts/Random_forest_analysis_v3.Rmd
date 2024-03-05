@@ -1,6 +1,6 @@
 ---
 title: "Random forest"
-author: "Hugo DENIS"
+author: "XXX"
 date: "2022-11-10"
 output: html_document
 ---
