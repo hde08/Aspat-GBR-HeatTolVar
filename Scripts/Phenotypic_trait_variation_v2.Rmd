@@ -299,7 +299,7 @@ adj_density_plot1=ed50_adj %>% ggplot(aes(ed50.fvfm_adj)) +
                      limits = c(35,40)) +
   annotate("text", x = c(35), 
            y = c(15), 
-           adj = 0, label = paste0("5%-95%\nrange = ", round(quantile(res.fvfm$ed50.fvfm_adj,probs=c(.05,.5, .95))[3]-quantile(res.fvfm$ed50.fvfm_adj,probs=c(.05,.5, .95))[1], 2)), size = 5)
+           adj = 0, label = paste0("2.5%-97.5%\nrange = ", round(quantile(res.fvfm$ed50.fvfm_adj,probs=c(.025,.5, .975))[3]-quantile(res.fvfm$ed50.fvfm_adj,probs=c(.025,.5, .975))[1], 2)), size = 5)
 
 adj_density_plot2=ed50_adj %>% ggplot(aes(ed50.ndvi_adj)) +
   geom_density(aes(y = ..count.. * 0.05),size=1,alpha=0.6,fill="#D3D3D3") +
@@ -310,7 +310,7 @@ adj_density_plot2=ed50_adj %>% ggplot(aes(ed50.ndvi_adj)) +
                      limits = c(34,39)) +
   annotate("text", x = c(34), 
            y = c(15), 
-           adj = 0, label = paste0("5%-95%\nrange = ", round(quantile(res.ndvi$ed50.ndvi_adj,probs=c(.05,.5, .95))[3]-quantile(res.ndvi$ed50.ndvi_adj,probs=c(.05,.5, .95))[1], 2)), size = 5)
+           adj = 0, label = paste0("2.5%-97.5%\nrange = ", round(quantile(res.ndvi$ed50.ndvi_adj,probs=c(.025,.5, .975))[3]-quantile(res.ndvi$ed50.ndvi_adj,probs=c(.025,.5, .975))[1], 2)), size = 5)
 
 all_plots=ggdraw() +draw_plot(adj_density_plot1,x=0.0,y=0.0,width=0.5,height=1)+  draw_plot(adj_density_plot2,x=0.50,y=0.0,width=0.5,height=1) + draw_plot_label(label=c("a", "b"),x=c(0.0,0.5),c(1, 1),size = 22)
 
