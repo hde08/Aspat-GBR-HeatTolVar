@@ -362,25 +362,23 @@ comp_sp %>%
 
 #Make Supplementary Table 5a
 ```{r}
-Site.stats.ed50 <- FvFm_ed50 %>%
+Site.stats.ed50 <- pheno_data %>% subset(Trait=="FvFm" & Metric=="ED50" )%>%
   group_by(Site.name) %>%
-  dplyr::summarise(mean = mean(ED50), sd = sd(ED50), n = n(),lower=Rmisc::CI(ED50, ci=0.95)[3],upper=Rmisc::CI(ED50, ci=0.95)[1],q1=quantile(ED50)[2],q3=quantile(ED50)[4],median=median(ED50),IQ=q3-q1,min=q1-1.5*IQ,max=q3+1.5*IQ) %>%
-  ungroup() %>% mutate(Trait="Fv/Fm",Metric="ED50")
+  dplyr::summarise(mean = mean(Value), sd = sd(Value), n = n(),lower=Rmisc::CI(Value, ci=0.95)[3],upper=Rmisc::CI(Value, ci=0.95)[1],q1=quantile(Value)[2],q3=quantile(Value)[4],median=median(Value),IQ=q3-q1,min=q1-1.5*IQ,max=q3+1.5*IQ) %>% mutate(Trait="Fv/Fm",Metric="ED50")
 
-Site.stats.ratio <- FvFm_ratio %>%
-  group_by(Site.name) %>%
-  dplyr::summarise(mean = mean(Ratio_FvFm.adj), sd = sd(Ratio_FvFm.adj), n = n(),lower=Rmisc::CI(Ratio_FvFm.adj, ci=0.95)[3],upper=Rmisc::CI(Ratio_FvFm.adj, ci=0.95)[1],q1=quantile(Ratio_FvFm.adj)[2],q3=quantile(Ratio_FvFm.adj)[4],median=median(Ratio_FvFm.adj),IQ=q3-q1,min=q1-1.5*IQ,max=q3+1.5*IQ) %>%
-  ungroup() %>% mutate(Trait="Fv/Fm",Metric="Ratio")
 
-Site.stats.ed50.2 <- Hyperspec_ed50 %>%
-  group_by(Site.name) %>%
-  dplyr::summarise(mean = mean(ED50), sd = sd(ED50), n = n(),lower=Rmisc::CI(ED50, ci=0.95)[3],upper=Rmisc::CI(ED50, ci=0.95)[1],q1=quantile(ED50)[2],q3=quantile(ED50)[4],median=median(ED50),IQ=q3-q1,min=q1-1.5*IQ,max=q3+1.5*IQ) %>%
-  ungroup() %>% mutate(Trait="NDVI",Metric="ED50")
 
-Site.stats.ratio.2 <- Hyperspec_ratio %>%
+Site.stats.ratio <- pheno_data %>% subset(Trait=="FvFm" & Metric=="Ratio" )%>%
   group_by(Site.name) %>%
-  dplyr::summarise(mean = mean(Ratio_NDVI.adj), sd = sd(Ratio_NDVI.adj), n = n(),lower=Rmisc::CI(Ratio_NDVI.adj, ci=0.95)[3],upper=Rmisc::CI(Ratio_NDVI.adj, ci=0.95)[1],q1=quantile(Ratio_NDVI.adj)[2],q3=quantile(Ratio_NDVI.adj)[4],median=median(Ratio_NDVI.adj),IQ=q3-q1,min=q1-1.5*IQ,max=q3+1.5*IQ) %>%
-  ungroup() %>% mutate(Trait="NDVI",Metric="Ratio")
+  dplyr::summarise(mean = mean(Value), sd = sd(Value), n = n(),lower=Rmisc::CI(Value, ci=0.95)[3],upper=Rmisc::CI(Value, ci=0.95)[1],q1=quantile(Value)[2],q3=quantile(Value)[4],median=median(Value),IQ=q3-q1,min=q1-1.5*IQ,max=q3+1.5*IQ) %>% mutate(Trait="Fv/Fm",Metric="ED50")
+
+Site.stats.ed50.2 <- pheno_data %>% subset(Trait=="NDVI" & Metric=="ED50" )%>%
+  group_by(Site.name) %>%
+  dplyr::summarise(mean = mean(Value), sd = sd(Value), n = n(),lower=Rmisc::CI(Value, ci=0.95)[3],upper=Rmisc::CI(Value, ci=0.95)[1],q1=quantile(Value)[2],q3=quantile(Value)[4],median=median(Value),IQ=q3-q1,min=q1-1.5*IQ,max=q3+1.5*IQ) %>% mutate(Trait="NDVI" ,Metric="ED50")
+
+Site.stats.ratio.2 <- pheno_data %>% subset(Trait=="NDVI" & Metric=="Ratio" )%>%
+  group_by(Site.name) %>%
+  dplyr::summarise(mean = mean(Value), sd = sd(Value), n = n(),lower=Rmisc::CI(Value, ci=0.95)[3],upper=Rmisc::CI(Value, ci=0.95)[1],q1=quantile(Value)[2],q3=quantile(Value)[4],median=median(Value),IQ=q3-q1,min=q1-1.5*IQ,max=q3+1.5*IQ) %>% mutate(Trait="NDVI" ,Metric="Ratio")
 
 pheno_sum=rbind(Site.stats.ed50,Site.stats.ratio,Site.stats.ed50.2,Site.stats.ratio.2)
 
