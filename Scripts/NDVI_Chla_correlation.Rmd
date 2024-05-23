@@ -24,7 +24,8 @@ Chicken : n=30
 Pelorus East : n=20
 ```{r}
 path="Data/"
-chla=read.csv(paste0(path,"Aspath_chla.csv"),header=T)
+chla=read.csv(paste0(path,"Aspath_chla.csv"),header=T,sep=";",check.names = F)
+colnames(chla)[1]="ID"
 ```
 
 #Regression between NDVI and Chlorophylle a 
@@ -62,3 +63,79 @@ both_plot=ggdraw() + draw_plot(mplot,x=0,y=0.5,width=0.5,height=0.5) + draw_plot
 
 ggsave(both_plot,filename=paste0("Figures/SupFigure_2.png"),width=12,height=8,dpi=320)
 ```
+
+#There appears to be a saturation of NDVI values at high chlorophyll content (> 20 ug/g). 
+#The following tests aim to assess whether or not this may confound the interpretations. 
+
+1. Test the correlation between the relative decline in NDVI and Chla in the +6 treatment 
+```{r}
+#Import temperature data
+temp_tanks=read.csv(paste0(path,"Aspat_tanks_temperature_adj.csv"),header=T)
+temp_tanks$Site_Treatment_Tank=paste(temp_tanks$Site.name,temp_tanks$Treatment,temp_tanks$Tank,sep="_")
+
+chla$Site_Treatment_Tank=paste(chla$Site.name,chla$Treatment,chla$Tank,sep="_")
+chla=chla %>% merge(temp_tanks %>% dplyr::select(Site_Treatment_Tank,meanTemp_hold.adj,maxTemp.adj),by="Site_Treatment_Tank")
+
+ratio=chla %>% group_by(Site.name,Genotype,Treatment)%>% dplyr::summarize(MeanNDVI=mean(MeanNDVI),Chla_per_dw=mean(Chla_per_dw),MeanTemp=mean(meanTemp_hold.adj))
+
+df_ratio=data.frame()
+for(i in unique(ratio$Genotype)){
+  r1=ratio$MeanNDVI[ratio$Genotype==i & ratio$Treatment=="+6C"]/ratio$MeanNDVI[ratio$Genotype==i & ratio$Treatment=="MMM"]
+  r2=ratio$Chla_per_dw[ratio$Genotype==i & ratio$Treatment=="+6C"]/ratio$Chla_per_dw[ratio$Genotype==i & ratio$Treatment=="MMM"]
+  rtemp=(ratio$MeanTemp[ratio$Genotype==i & ratio$Treatment=="+6C"]-ratio$MeanTemp[ratio$Genotype==i & ratio$Treatment=="MMM"])/6
+  df_ratio=rbind(df_ratio,data.frame(Genotype=i,Site.name=unique(ratio$Site.name[ratio$Genotype==i]),MeanNDVI=r1,Chla_per_dw=r2))
+}
+
+df_ratio %>% subset(Chla_per_dw<1.2) %>% ggplot(aes(x=Chla_per_dw,y=MeanNDVI)) + geom_point(size=2) + theme(axis.text.x=element_text(size=20,color="black"),axis.text.y=element_text(size=20,color="black"),axis.title.x = element_text(size=18,color="black"),axis.title.y = element_text(size=20,color="black"),legend.title = element_text(size=15,color="black"),legend.text = element_text(size=20,color="black"),legend.position = "none",legend.background = element_rect(fill = "transparent"),
+          panel.background = element_rect(colour = "black", size=1.5))+ 
+  geom_smooth(method='lm', formula= y~x,size=1.5,colour="black")+
+   ggpmisc::stat_poly_eq(formula =y~x, 
+                aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")), 
+                parse = TRUE,size=7,label.y=0.9)
+```
+
+#Compare NDVI measurements to F0 
+```{r}
+df_filt_info=read.csv(paste0(path,"ECT1_Aspat_FvFm.csv"),header=T,sep=";")
+colnames(df_filt_info)[1]="ID"
+df_filt_info=df_filt_info %>% subset(qc!=3)
+
+df_hyper=read.csv(paste0(path,"ECT1_Aspat_Hyperspec_NDVI.csv"),header=T,sep=";")
+
+df_hyper=df_hyper %>% merge(df_filt_info %>% dplyr::select(ID,mF),by="ID")
+df_hyper$Treatment=factor(df_hyper$Treatment,levels=c("MMM","+3C","+6C","+9C"))
+#Correlation chlorophyll and F0
+
+
+f0_ndvi=df_hyper %>% subset(MeanNDVI<0.6) %>% ggplot(aes(x=mF,y=MeanNDVI)) + geom_point(size=3,alpha=0.6)+ theme_linedraw()+ labs(x="F0",y="NDVI")+ theme(axis.text.x=element_text(size=20,color="black"),axis.text.y=element_text(size=20,color="black"),axis.title.x = element_text(size=18,color="black"),axis.title.y = element_text(size=20,color="black"),legend.title = element_text(size=15,color="black"),legend.text = element_text(size=20,color="black"),legend.position = "none",legend.background = element_rect(fill = "transparent"),
+          panel.background = element_rect(colour = "black", size=1.5))+ facet_wrap(.~Treatment) + 
+       theme(strip.text.x = element_text(size = 25)) + 
+  geom_smooth(method='lm', formula= y~x,size=1.5,colour="black")+
+   ggpmisc::stat_poly_eq(formula =y~x, 
+                aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")), 
+                parse = TRUE,size=7,label.y=0.9) + ylim(c(0,1)) 
+
+ggsave(f0_ndvi,filename="C:/Users/Hugo/Documents/Figures/GBR_ED50/F0_NDVI_inf0.6.png",width=12,height=10,dpi=320)
+
+
+#Histogram of values distribution *
+#Sites coordinates and MMM
+sites_data=read.csv(paste0(path,"GBR_Aspat_sites_data.csv"),sep=";")
+
+new_palette=c("#1ba3c6" ,"#2cb5c0","#FFF880","#FFE135","#C60012") 
+
+df_hyper$Site.name=factor(df_hyper$Site.name,levels=sites_data$Site.name[order(sites_data$MMM)])
+  
+f0_hist=df_hyper %>% merge(sites_data %>% dplyr::select(Site.name,MMM),by="Site.name") %>% ggplot(aes(x=mF)) + geom_histogram(aes(fill = MMM,group=MMM))+ theme_linedraw()+ labs(x="F0",y="N")+ theme(axis.text.x=element_text(size=20,color="black"),axis.text.y=element_text(size=20,color="black"),axis.title.x = element_text(size=18,color="black"),axis.title.y = element_text(size=20,color="black"),legend.title = element_text(size=15,color="black"),legend.text = element_text(size=20,color="black"),legend.position = "right",legend.background = element_rect(fill = "transparent"),
+          panel.background = element_rect(colour = "black", size=1.5))+ facet_wrap(.~Treatment) + 
+       theme(strip.text.x = element_text(size = 25)) +scale_fill_gradientn(colors=new_palette) 
+
+ggsave(f0_hist,filename="C:/Users/Hugo/Documents/Figures/GBR_ED50/F0_distrib_wcolor.png",width=12,height=10,dpi=320)
+
+ndvi_hist=df_hyper %>% merge(sites_data %>% dplyr::select(Site.name,MMM),by="Site.name") %>% ggplot(aes(x=MeanNDVI)) + geom_histogram(aes(fill = MMM,group=MMM))+ theme_linedraw()+ labs(x="NDVI",y="N")+ theme(axis.text.x=element_text(size=20,color="black"),axis.text.y=element_text(size=20,color="black"),axis.title.x = element_text(size=18,color="black"),axis.title.y = element_text(size=20,color="black"),legend.title = element_text(size=15,color="black"),legend.text = element_text(size=20,color="black"),legend.position = "none",legend.background = element_rect(fill = "transparent"),
+          panel.background = element_rect(colour = "black", size=1.5))+ facet_wrap(.~Treatment) + 
+       theme(strip.text.x = element_text(size = 25)) +scale_fill_gradientn(colors=new_palette) 
+
+ggsave(ndvi_hist,filename="C:/Users/Hugo/Documents/Figures/GBR_ED50/NDVI_distrib_wcolor.png",width=12,height=10,dpi=320)
+```
+

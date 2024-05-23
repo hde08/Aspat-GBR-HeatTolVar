@@ -27,7 +27,7 @@ library(memisc)
 #Import FvFm data 
 ```{r}
 path="Data/"
-df_filt_info=read.csv(paste0(path,"Data/GBR_PAM/ECT1_Aspat_FvFm.csv"),header=T)
+df_filt_info=read.csv(paste0(path,"ECT1_Aspat_FvFm.csv"),header=T,sep=";")
 
 #Remove fragments with qc value = 3 as unaccurate (See supplementary methods)
 df_filt_info=df_filt_info %>% subset(qc!=3)
@@ -68,26 +68,34 @@ sites_data=read.csv(paste0(path,"GBR_Aspat_sites_data.csv"),header=T)
 #potential tanks and fragment size effects
 ```{r}
 #Add fragment sizes to the dataset 
-frag_sizes=read.csv(paste0(path,"Data/GBR_Hyperspec/Aspat_fragment_sizes.csv"),header=T)
+frag_sizes=read.csv(paste0(path,"Aspat_fragment_sizes.csv"),header=T)
 
 #Append to FvFm data
 #Some missing fragments from hyperspec are removed from the dataset 
 df_filt_info2=df_filt_info %>% merge(frag_sizes %>% dplyr::select(ID,Npixel),by="ID")
 
 #Fit first model using REML as it provides unbiased estimates and use if for backward stepwise selection based on F-tests to compare full and reduced models 
-me=lmer(mFvFm ~ Npixel + Site.name + Treatment +(1|Tank) + (1|Genotype), data = df_filt_info2,REML=T)
+me=lmer(mFvFm ~ Npixel + Site.name + Treatment +(1|Tank) + (1|Genotype), data = df_filt_info2,REML=F)
 step(me)
 summary(me)
 plot(me)
 qqnorm(resid(me))
 
 #Get confidence intervals
-confint(me,level=0.95,method="boot")
+c=confint(me,level=0.95,method="boot")
 #The size of fragments was removed from the model 
 
 #Percentage of variation explained by tanks 
-tank_var=100*0.0001077/(0.0001077+0.0008358+0.0057206)
+tank_var=100*0.0001137/(0.0001137+0.0008373+0.0057423)
 genotype_var=100*0.0008358/(0.0001077+0.0008358+0.0057206)
+
+#Export to csv
+# sum=data.frame(summary(me)$coefficients)
+# c=data.frame(c)
+# sum[,1:3]=format(sum[,1:3],digits=3)
+# sum[,4]=round(sum[,4],3)
+# sum=cbind(sum,format(c[-c(1:3),],digits=3))
+# write.csv(sum,".txt")
 ```
 
 
@@ -103,7 +111,7 @@ max_lower=0.3
 #Genotype Weibull model 
 for(site in unique(df_filt_info$Site.name)){
   FvFm.genotype.W2.3<-drm(mFvFm~meanTemp_hold.adj, data=df_filt_info %>% subset(Site.name==site), curveid = Genotype, fct=W2.3(names = c('hill', 'max', 'ed50')),upperl=c(NA,max_upper,40),lowerl=c(NA,max_lower,30))
-  saveRDS(FvFm.genotype.W2.3,file=paste0("/home/hugo/Outputs/FvFm/",site,"_W2.3_wconstraint_v2.rds"))
+  saveRDS(FvFm.genotype.W2.3,file=paste0("Outputs/FvFm/",site,"_W2.3_wconstraint_v2.rds"))
 }
 
 #Site level model 
@@ -118,7 +126,7 @@ for(site in unique(df_filt_info$Site.name)){
 ```{r}
 model_comp=data.frame()
 for(site in unique(df_filt_info$Site.name)){
-  model_geno=readRDS(paste0("/home/hugo/Outputs/FvFm/",site,"_W2.3_wconstraint_v2.rds"))
+  model_geno=readRDS(paste0("Outputs/FvFm/",site,"_W2.3_wconstraint_v2.rds"))
   m=data.frame(drc::mselect(model_geno, list(W1.3(), LL.3()), linreg=TRUE, icfct=AIC))
   m$model=row.names(m)
   m$Site.name=site
@@ -136,7 +144,7 @@ write.csv(model_comp,paste0("Outputs/FvFm/","FvFm_Modelcomparison_AIC.csv"),row.
 
 df_ed=data.frame()
 for(site in unique(df_filt_info$Site.name)){
-  model_W2.3=readRDS(paste0("/home/hugo/Outputs/FvFm/",site,"_W2.3_wconstraint_v2.rds"))
+  model_W2.3=readRDS(paste0("Outputs/FvFm/",site,"_W2.3_wconstraint_v2.rds"))
   ed_W2.3=data.frame(ED(model_W2.3,c(25,50),interval="delta")) %>% mutate(Site.name=site)
   ed_W2.3$ED=sapply(strsplit(rownames(ed_W2.3),":"),"[[",3)
   ed_W2.3$Genotype=sapply(strsplit(rownames(ed_W2.3),":"),"[[",2)
@@ -158,7 +166,7 @@ write.csv(df_ed,paste0("Outputs/FvFm/","EDs_W2.3.csv"))
 
 df_param=data.frame()
 for(site in unique(df_filt_info$Site.name)){
-  model_W2.3=readRDS(paste0("/home/hugo/Outputs/FvFm/",site,"_W2.3_wconstraint_v2.rds"))
+  model_W2.3=readRDS(paste0("Outputs/FvFm/",site,"_W2.3_wconstraint_v2.rds"))
   sum_W2.3=broom::tidy(model_W2.3)
   
   #Reformat into single dataframe 
@@ -326,12 +334,12 @@ mean(temp_tanks_comp$error[temp_tanks_comp$Site.name=="St Crispin"])
 
 #Average decline in photosynthetic traits 
 ```{r}
-df_filt_info %>% group_by(Treatment) %>% dplyr::summarise(mFvFm2=mean(mFvFm
+df_filt_info %>% subset(Site.name!="St Crispin") %>% group_by(Treatment) %>% dplyr::summarise(mFvFm2=mean(mFvFm
                                                                      ),sd=sd(mFvFm)) %>% mutate(Perc_decline=100*(1-(mFvFm2/0.6565353)))
 
 #proportion of genotypes for which decline under +9°C is inferior to 50%
-a=df_filt_info %>% group_by(Genotype,Treatment) %>% dplyr::summarise(mFvFm2=mean(mFvFm
-                                                                     )) %>% pivot_wider(names_from="Treatment",values_from="mFvFm2") %>% mutate(Perc_decline=100*(1-(`+9C`/MMM))) %>% subset(Perc_decline>0)
+a=df_filt_info %>% subset(Site.name!="St Crispin") %>% group_by(Genotype,Treatment) %>% dplyr::summarise(mFvFm2=mean(mFvFm
+                                                                     )) %>% pivot_wider(names_from="Treatment",values_from="mFvFm2") %>% mutate(Perc_decline=100*(1-(`+3C`/MMM))) %>% subset(Perc_decline>0)
 
 min(a$Perc_decline)
 max(a$Perc_decline)

@@ -34,7 +34,7 @@ library(party)
 
 #Load custom functions 
 path="Data/"
-source(paste0(path,"Hugo/Scripts/cforest_plotting_functions.R"))
+source(paste0(path,"cforest_plotting_functions.R"))
 ```
 
 #Load the data
@@ -203,7 +203,7 @@ Imp_rf_rep_summary=Imp_rf_rep %>% mutate(Trait_metric=paste0(Trait,"_",Metric)) 
 
 Imp_rf_rep_summary=Imp_rf_rep_summary  %>% arrange(Trait_metric,desc(mean))
 
-write.csv(Imp_rf_rep_summary,"/home/hugo/Outputs/PhenoxEnv/RF_var_importance_summary.csv",row.names=F)
+write.csv(Imp_rf_rep_summary,"Outputs/PhenoxEnv/RF_var_importance_summary.csv",row.names=F)
 ```
 
 3/ Figures

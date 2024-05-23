@@ -34,30 +34,31 @@ library(scatterpie)
 library(RColorBrewer)
 
 
-#Load plotting functions 
 path="Data/"
-source(paste0("Scripts/heat_tol_variation_plotting_functions.R"))
 ```
 
 #Read data 
 ```{r}
 #Phenotypic data
-pheno_data=read.csv(paste0(path,"Phenotypic_trait_per_genotype.csv"),header=T)
+pheno_data=read.csv(paste0(path,"Phenotypic_trait_per_genotype.csv"),header=T,sep=";")
+
+pheno_data=pheno_data %>% subset(Site.name!="St Crispin")
 
 #Sites coordinates and MMM
-sites_data=read.csv(paste0(path,"GBR_Aspat_sites_data.csv"))
+sites_data=read.csv(paste0(path,"GBR_Aspat_sites_data.csv"),sep=";")
 
 #Create site color palette, ordered by MMM
 mycolors<-c("#1ba3c6" ,"#2cb5c0" ,"#21B087", "#33a65c" ,"#a2b627" ,"#f8b620", "#f89217", "#f06719","#e03426" ,"#f64971", "#fc719e" , "#ce69be", "#7873c0", "#4f7cba")
 #Order site names by MMM
 names(mycolors)<-sites_data$Site.name[order(sites_data$MMM)]
 
-Both.sites=read.csv(paste0(path,"Data/GBR_PAM/Sites_thermal_tolerance_summary_v2.csv"),header=T)
-#Exclude St Crispin
-Both.sites=Both.sites[1:13,]
-
-modif_pos=read.csv(paste0(path,"/Data/Sites_thermal_tolerance_pos_adjusted.csv"),header=T,sep=";")
-colnames(modif_pos)[1]="Site.name"
+# 
+# Both.sites=read.csv(paste0(path2,"Data/GBR_PAM/Sites_thermal_tolerance_summary_v2.csv"),header=T)
+# #Exclude St Crispin
+# Both.sites=Both.sites[1:13,]
+# 
+# modif_pos=read.csv(paste0(path2,"/Data/Sites_thermal_tolerance_pos_adjusted.csv"),header=T,sep=";")
+# colnames(modif_pos)[1]="Site.name"
 ```
 
 1/ Analyse heat tolerance variation among and within sites
@@ -79,16 +80,16 @@ df_omega=data.frame()
 for(t in unique(pheno_data$Trait)){
   for(m in unique(pheno_data$Metric)){
     res.aov <- aov(residuals ~ Site.name, pheno_data %>% subset(Metric==m & Trait==t))
-capture.output(summary(res.aov),file=paste0("D:/Hugo/Results/1st_paper/Levene_",m,"_",t,".txt"),sep="\t",append=TRUE)
+#capture.output(summary(res.aov),file=paste0("D:/Hugo/Results/1st_paper/Levene_",m,"_",t,".txt"),sep="\t",append=TRUE)
   #Post-hoc levene's test
   tukey=TukeyHSD(res.aov)
 df.post.hoc=data.frame(tukey$Site.name)
-write.csv(df.post.hoc,paste0("D:/Hugo/Results/1st_paper/Levene_posthoc_",m,"_",t,".csv"),row.names=T)
+#write.csv(df.post.hoc,paste0("D:/Hugo/Results/1st_paper/Levene_posthoc_",m,"_",t,".csv"),row.names=T)
 
   #Perform Welch Anova 
   welch <- oneway.test(Value ~ Site.name, data = pheno_data %>% subset(Metric==m & Trait==t),var.equal=F)
   df_welch=data.frame(tidy(welch))
-  write.csv(df_welch,paste0("D:/Hugo/Results/1st_paper/Welch_anova_",m,"_",t,".csv"),row.names=T)
+  #write.csv(df_welch,paste0("D:/Hugo/Results/1st_paper/Welch_anova_",m,"_",t,".csv"),row.names=T)
   
   welch2 <- oneway.test(Value ~ Site.name, data = pheno_data %>% subset(Metric==m & Trait==t & Site.name!="St Crispin"),var.equal=F)
   
@@ -159,30 +160,33 @@ write.csv(site_df %>% arrange(Comparison),paste0("Outputs/Site_correlations.csv"
 source(paste0("Scripts/heat_tol_variation_plotting_functions.R"))
 
 #Barplot
-p1=heattol_boxplot(pheno_data %>% subset(Trait=="FvFm" & Metric=="ED50"),"Value","Fv/Fm ED50 (°C)",15,34,40,34,40,2,element_blank(),element_blank(),element_blank())
-p2=heattol_boxplot(pheno_data %>% subset(Trait=="FvFm" & Metric=="Ratio"),"Value","Fv/Fm +9℃/MMM",15,0.1,0.9,0.1,0.9,0.2,element_blank(),element_blank(),element_blank())
+p1=heattol_boxplot(pheno_data %>% subset(Trait=="FvFm" & Metric=="ED50"),"Value","Fv/Fm ED50 (°C)",15,35,41,35,41,2,element_blank(),element_blank(),element_blank())
+p2=heattol_boxplot(pheno_data %>% subset(Trait=="FvFm" & Metric=="Ratio"),"Value","Fv/Fm +9\u00B0C/MMM" ,15,0.1,0.9,0.1,0.9,0.2,element_blank(),element_blank(),element_blank())
 
-p3=heattol_boxplot(pheno_data %>% subset(Trait=="NDVI" & Metric=="ED50"),"Value","NDVI ED50 (°C)",15,33,40,33,40,2,element_blank(),element_blank(),element_blank())
+p3=heattol_boxplot(pheno_data %>% subset(Trait=="NDVI" & Metric=="ED50"),"Value","NDVI ED50 (°C)",15,34,39.5,34,39.5,2,element_blank(),element_blank(),element_blank())
 
-p4=heattol_boxplot(pheno_data %>% subset(Trait=="NDVI" & Metric=="Ratio"),"Value","NDVI +9℃/MMM",15,0,0.9,-0.1,0.9,0.2,element_text(size=14.5,color="black",angle=45,hjust=0.95),element_text(size=15,color="black"),element_line())
+p4=heattol_boxplot(pheno_data %>% subset(Trait=="NDVI" & Metric=="Ratio"),"Value","NDVI +9\u00B0CMMM",15,0,0.9,-0.1,0.9,0.2,element_text(size=14.5,color="black",angle=45,hjust=0.95),element_text(size=15,color="black"),element_line())
 
 
 new_palette=c("#1ba3c6" ,"#2cb5c0","#FFF880","#FFE135","#C60012") 
 
 #Histograms
-h1=heattol_histo(pheno_data %>% subset(Trait=="FvFm" & Metric=="ED50"),15,34,40,2,element_blank(),element_blank(),element_blank(),0.2,0.2,140,5,2)
+h1=heattol_histo(pheno_data %>% subset(Trait=="FvFm" & Metric=="ED50"),15,35,41,2,element_blank(),element_blank(),element_blank(),0.2,0.2,140,5,2)
 h2=heattol_histo(pheno_data %>% subset(Trait=="FvFm" & Metric=="Ratio"),15,0.1,0.9,0.2,element_blank(),element_blank(),element_blank(),0.03,0.03,15,0.2,0.3)
-h3=heattol_histo(pheno_data %>% subset(Trait=="NDVI" & Metric=="ED50"),15,33,40,2,element_blank(),element_blank(),element_blank(),0.2,0.2,120,2,3)
-h4=heattol_histo(pheno_data %>% subset(Trait=="NDVI" & Metric=="Ratio"),15,-0.1,0.9,0.2,element_text(size=15,color="black"),element_text(size=15,color="black"),element_line(),0.03,0.03,20,0.8,0.3)
+h3=heattol_histo(pheno_data %>% subset(Trait=="NDVI" & Metric=="ED50"),15,34,39.5,2,element_blank(),element_blank(),element_blank(),0.2,0.2,120,2,2)
+h4=heattol_histo(pheno_data %>% subset(Trait=="NDVI" & Metric=="Ratio"),15,-0.1,0.9,0.2,element_text(size=15,color="black"),element_text(size=15,color="black"),element_line(),0.03,0.03,20,0.8,0.2)
 
 #Create external color legend 
 dummy_plot=sites_data %>% ggplot() + geom_boxplot(aes(x=Site.name,y=Lat,fill=MMM))+ theme(legend.title = element_text(size=17,color="black"),legend.text = element_text(size=17,color="black"),legend.background = element_rect(fill = "transparent"),legend.key.height = unit(20,"mm"),legend.key.width = unit(4,"mm")) +scale_fill_gradientn(colours = new_palette,limits=c(27,29),breaks=c(27,27.25,27.5,27.75,28,28.25,28.5,28.75,29)) 
 col_legend=ggpubr::get_legend(dummy_plot)
 
 global_plot=ggdraw() +draw_plot(p1,x=0.004,y=0.775,width=0.6495,height=0.23)+  draw_plot(p2,x=0,y=0.55,width=0.655,height=0.225) +  draw_plot(p3,x=0.005,y=0.325,width=0.645,height=0.225)+  draw_plot(p4,x=0.001,y=0.0,width=0.6495,height=0.325) + draw_plot_label(label=c("a", "b","c","d"),x=c(0.0,0,0,0),c(1, 0.79,0.54,0.33),size = 22) +draw_plot(h1,x=0.639,y=0.775,width=0.22,height=0.231) +  draw_plot(h2,x=.6375,y=0.55,width=0.22,height=0.225) +  draw_plot(h3,x=.635,y=0.325,width=0.22,height=0.225) +
-  draw_plot(h4,x=.636,y=0.075,width=0.22,height=0.25) + draw_plot(col_legend,x=0.85,y=0.2,width=0.1,height=0.6) + draw_text("*",size=35,x=0.455,y=0.9) + draw_text("*",size=35,x=0.455,y=0.43)
+  draw_plot(h4,x=.636,y=0.075,width=0.22,height=0.25) + draw_plot(col_legend,x=0.85,y=0.2,width=0.1,height=0.6) + theme(plot.background = element_rect(fill = 'white'))
 
 ggsave(global_plot,filename="Figures/Figure_2.png",width=14,height=12,dpi=320)
+
+x11()
+plot(global_plot)
 
 ```
 
@@ -382,13 +386,12 @@ Site.stats.ratio.2 <- pheno_data %>% subset(Trait=="NDVI" & Metric=="Ratio" )%>%
 
 pheno_sum=rbind(Site.stats.ed50,Site.stats.ratio,Site.stats.ed50.2,Site.stats.ratio.2)
 
-write.csv(pheno_sum,"D:/Hugo/Results/Phenotypic_traits_site_summary.csv",row.names=F)
 ```
 
 #Global stats
 ```{r}
 #Global summary across all sites
-pheno_data %>% group_by(Trait,Metric) %>% dplyr::summarise(mean=mean(Value),sd=sd(Value),median=median(Value),cv=100*sd/mean,min=min(Value),max=max(Value))
+sum=pheno_data %>% group_by(Trait,Metric) %>% dplyr::summarise(mean=mean(Value),sd=sd(Value),median=median(Value),cv=100*sd/mean,min=min(Value),max=max(Value))
 
 sum=pheno_data %>% group_by(Trait,Metric,Site.name) %>% dplyr::summarise(mean=mean(Value),sd=sd(Value),cv=100*sd/mean)
 

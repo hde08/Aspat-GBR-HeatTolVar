@@ -36,7 +36,8 @@ Sys.setlocale(locale = "C")
 ```{r}
 path="Data/"
 path_out="Figures/"
-colony_env=read.csv(paste0(path,"ECT1_Aspat_colonies_environmental_data_24metrics.csv"),header=T)
+colony_env=read.csv(paste0(path,"ECT1_Aspat_colonies_environmental_data_24metrics.csv"),header=T,sep=";")
+colnames(colony_env)[1]="Genotype"
 
 #Define color palette for sites
 mycolors<-c("#1ba3c6" ,"#2cb5c0" ,"#21B087", "#33a65c" ,"#a2b627" ,"#f8b620", "#f89217", "#f06719","#e03426" ,"#f64971", "#fc719e" , "#ce69be", "#7873c0", "#4f7cba")
@@ -103,27 +104,30 @@ kept_var_table=kept_var_table %>% merge(group_table_sum,by.x="Kept_metric",by.y=
 path="Data/"
 
 #Retrieve color scale 
-sites_data=read.csv(paste0(path,"GBR_Aspat_sites.csv"),header=T,sep=";")
+sites_data=read.csv(paste0(path,"GBR_Aspat_sites_data.csv"),header=T,sep=";")
 colnames(sites_data)[1]="Reef.Name"
-sites_data=sites_data %>% subset(Reef.Name %in% pheno_data$Site.name)
+sites_data=sites_data %>% subset(Reef.Name %in% pheno_data$Site.name) %>% subset(Reef.Name!="St Crispin")
 
-mycolors<-c("#1ba3c6" ,"#2cb5c0" ,"#21B087", "#33a65c" ,"#a2b627" ,"#f8b620", "#f89217", "#f06719","#e03426" ,"#f64971", "#fc719e" , "#ce69be", "#7873c0", "#4f7cba")
+mycolors<-c("#1ba3c6" ,"#2cb5c0" ,"#21B087", "#33a65c" ,"#a2b627" ,"#f8b620", "#f89217", "#f06719","#e03426" ,"#f64971", "#ce69be", "#7873c0", "#4f7cba")
 #Order site names by MMM
 names(mycolors)<-sites_data$Reef.Name[order(sites_data$MMM)]
 
-colony_env_wide_red=read.csv(paste0(path,"ECT1_Aspat_colonies_environmental_data_uncor_v3_0.7.csv"),header=T)
+colony_env_wide_red=read.csv(paste0(path,"ECT1_Aspat_colonies_environmental_data_uncor_v3_0.7.csv"),header=T,sep=";")
+colnames(colony_env_wide_red)[1]="Genotype"
 
-colony_env_wide_all=read.csv(paste0(path,"ECT1_Aspat_colonies_environmental_data_24metrics.csv"),header=T)
+colony_env_wide_all=read.csv(paste0(path,"ECT1_Aspat_colonies_environmental_data_24metrics.csv"),header=T,sep=";")
+colnames(colony_env_wide_all)[1]="Genotype"
 
 #Add site name info to table 
-pheno_data=read.csv(paste0(path,"Phenotypic_trait_per_genotype.csv"),header=T)
-colony_env_wide_all=colony_env_wide_all %>% merge(pheno_data %>% distinct(Site.name,Genotype),by="Genotype")
+pheno_data=read.csv(paste0(path,"Phenotypic_trait_per_genotype.csv"),header=T,sep=";")
+colnames(pheno_data)[1]="Site.name"
+colony_env_wide_all=colony_env_wide_all %>% merge(pheno_data %>% distinct(Site.name,Genotype),by="Genotype") %>% subset(Site.name!="St Crispin")
 
 #Arrows name (only R<0.7 + MMM)
 arrow_name=c(colnames(colony_env_wide_red),"MMM","Site.name","Genotype")
 
 #Run PCA
-env.pca<-prcomp(colony_env_wide_all %>% dplyr::select(-c(Genotype,Site.name)),center=T,scale.=T)
+env.pca<-prcomp(colony_env_wide_all %>% dplyr::select(-c(Genotype,Site.name,eventID)),center=T,scale.=T)
 
 sites=colony_env_wide_all$Site.name
 
@@ -140,8 +144,8 @@ sites_pca_barycentre=dat_pca %>% group_by(Site.name) %>% dplyr::summarize(PC1=me
 
 
 #Adjust label position to avoid overlap
-sites_pca_barycentre$hjust=c(0.003,0,0.005,-0.002,0,0.004,-0.002,-0.01,-0.002,0.00,0.004,-0.01,-0.006,0)
-sites_pca_barycentre$vjust=c(0.002,-0.004,0.006,0,0,0,0,-0.002,-0.003,-0.002,0.001,-0.005,0.004,-0.005)
+sites_pca_barycentre$hjust=c(0.003,0,0.005,-0.002,0,0.004,-0.002,+0.001,-0.002,0.00,-0.003,-0.006,0)
+sites_pca_barycentre$vjust=c(0.002,-0.004,0.006,0,0,0,0,+0.002,+0.005,-0.002,-0.003,-0.005,-0.005)
 
 #Get scaling factor from autoplot
 scores <- data.frame(env.pca$x[, 1:2])

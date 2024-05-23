@@ -4,8 +4,8 @@
 
 #Boxplot 
 heattol_boxplot=function(df,Metric,Metric_lab,text_size,breaks_min,breaks_max,ymin,ymax,breaks_gap,xlab,xtitlelab,xticks){
-  path="/data1/Denis/Hugo/"
-  sites_data=read.csv(paste0(path,"Data/GBR_env_data/sites_data_ECT1.csv"),header=T,sep=";")
+
+  sites_data=read.csv(paste0("Data/GBR_Aspat_sites_data.csv"),header=T,sep=";")
   colnames(sites_data)[1]="Reef.Name"
   # sites_data=read.csv(paste0(path,"Data/GBR_env_data/Aspath_sites_data.csv"))
   sites_data=sites_data %>% subset(Reef.Name %in% unique(df$Site.name))
@@ -59,9 +59,12 @@ heattol_boxplot=function(df,Metric,Metric_lab,text_size,breaks_min,breaks_max,ym
 
 heattol_histo=function(df,text_size,breaks_min,breaks_max,breaks_gap,xlab,xtitlelab,xticks,binw,f,f2,hm,vm){
   # sites_data=read.csv("D:/Hugo/Data/GBR_env_data/sites_data_ECT1.csv",header=T,sep=";")
+  # 
+  # path="/data1/Denis/Hugo/"
+  # sites_data=read.csv(paste0(path,"Data/GBR_env_data/sites_data_ECT1.csv"),header=T,sep=";")
   
-  path="/data1/Denis/Hugo/"
-  sites_data=read.csv(paste0(path,"Data/GBR_env_data/sites_data_ECT1.csv"),header=T,sep=";")
+  sites_data=read.csv(paste0("Data/GBR_Aspat_sites_data.csv"),header=T,sep=";")
+  
   colnames(sites_data)[1]="Reef.Name"
   sites_data=sites_data %>% subset(Reef.Name %in% unique(df$Site.name))
   
@@ -69,6 +72,10 @@ heattol_histo=function(df,text_size,breaks_min,breaks_max,breaks_gap,xlab,xtitle
   mean <- mean(df$Value)
   median <- median(df$Value)
   sd <- sd(df$Value)
+  
+  a=data.frame(median=0,mean=0)
+  a$median=median
+  a$mean=mean
   
   
   df=merge(df,sites_data %>% dplyr::select(Reef.Name,MMM),by.x="Site.name",by.y="Reef.Name")
@@ -88,15 +95,10 @@ heattol_histo=function(df,text_size,breaks_min,breaks_max,breaks_gap,xlab,xtitle
                               panel.background = element_rect(colour = "black", size=1.5)) +
     labs(x = "", y = "Number of colonies",fill="Site") +
     guides(fill = guide_legend(reverse = TRUE))+scale_fill_gradientn(colours = new_palette) +
-    geom_vline(aes(xintercept = median),size=1) +scale_x_continuous(breaks = seq(breaks_min,breaks_max,by=breaks_gap),
+    geom_vline(aes(xintercept = a$median),size=1) +scale_x_continuous(breaks = seq(breaks_min,breaks_max,by=breaks_gap),
                                                                  limits = c(breaks_min,breaks_max)) +scale_y_continuous(breaks = seq(0,80,by=20),
-                                                                                                                        limits = c(0,90)) +
-    # geom_segment(aes(x = mean, xend = mean - sd-0.05, 
-    #                  y = dnorm(mean + sd, mean, sd) * f2,
-    #                  yend = dnorm(mean + sd, mean, sd) * f2),
-    #              arrow = arrow(length = unit(0.4,"cm"), ends = "both"), lwd = 1,size=1)+
-    annotate("text", x = mean +vm, y = 82, adj = 1,
-             label = paste0("median = ", round(median, 2),"??",round(sd, 2)), size = 5)  + coord_flip()
+                                                                                                                        limits = c(0,90)) +annotate("text", x = a$median +vm, y = 82, adj = 1,
+             label = paste0("median = ", round(a$median, 2),"\u00B1",round(sd, 2)), size = 5)  + coord_flip()
   
   # +
   #   annotate("text", x = mean -hm,
