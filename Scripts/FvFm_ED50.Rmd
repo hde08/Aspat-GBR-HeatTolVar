@@ -144,7 +144,7 @@ write.csv(model_comp,paste0("Outputs/FvFm/","FvFm_Modelcomparison_AIC.csv"),row.
 
 df_ed=data.frame()
 for(site in unique(df_filt_info$Site.name)){
-  model_W2.3=readRDS(paste0("Outputs/FvFm/",site,"_W2.3_wconstraint_v2.rds"))
+  model_W2.3=readRDS(paste0(path2,"Outputs/FvFm/",site,"_W2.3_wconstraint_v2.rds"))
   ed_W2.3=data.frame(ED(model_W2.3,c(25,50),interval="delta")) %>% mutate(Site.name=site)
   ed_W2.3$ED=sapply(strsplit(rownames(ed_W2.3),":"),"[[",3)
   ed_W2.3$Genotype=sapply(strsplit(rownames(ed_W2.3),":"),"[[",2)
@@ -162,11 +162,11 @@ gendelete_max=comp_max$Genotype[abs(comp_max$mFvFm-comp_max$Estimate)>0.1]
 df_ed=df_ed %>% subset(Term=="ED50" & Model=="W2.3")
 df_ed=df_ed %>% subset(!Genotype %in% gendelete_max )
 colnames(df_ed)[1]="ED50"
-write.csv(df_ed,paste0("Outputs/FvFm/","EDs_W2.3.csv"))
+write.csv(df_ed,paste0(path2,"Outputs/FvFm/","EDs_W2.3.csv"))
 
 df_param=data.frame()
 for(site in unique(df_filt_info$Site.name)){
-  model_W2.3=readRDS(paste0("Outputs/FvFm/",site,"_W2.3_wconstraint_v2.rds"))
+  model_W2.3=readRDS(paste0(path2,"Outputs/FvFm/",site,"_W2.3_wconstraint_v2.rds"))
   sum_W2.3=broom::tidy(model_W2.3)
   
   #Reformat into single dataframe 

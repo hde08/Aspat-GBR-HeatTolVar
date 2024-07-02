@@ -40,9 +40,9 @@ path="Data/"
 #Read data 
 ```{r}
 #Phenotypic data
-pheno_data=read.csv(paste0(path,"Phenotypic_trait_per_genotype.csv"),header=T,sep=";")
+pheno_data2=read.csv(paste0(path,"/Phenotypic_trait_per_genotype.csv"),header=T,sep=";")
 
-pheno_data=pheno_data %>% subset(Site.name!="St Crispin")
+pheno_data2=pheno_data2 %>% subset(Site.name!="St Crispin")
 
 #Sites coordinates and MMM
 sites_data=read.csv(paste0(path,"GBR_Aspat_sites_data.csv"),sep=";")

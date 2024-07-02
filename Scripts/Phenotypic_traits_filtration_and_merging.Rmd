@@ -25,7 +25,7 @@ FvFm_ed50=read.csv(paste0("Outputs/FvFm/EDs_W2.3.csv"),header=T)
 Hyperspec_ed50=read.csv(paste0("Outputs/NDVI/NDVI_ED50.csv"),header=T)
 Hyperspec_ed50$CI=Hyperspec_ed50$Upper-Hyperspec_ed50$Lower
 
-Hyperspec_ratio=read.csv(paste0"Outputs/NDVI/NDVI_ratios_adjusted.csv"),header=T)
+Hyperspec_ratio=read.csv(paste0("Outputs/NDVI/NDVI_ratios_adjusted.csv"),header=T)
 Hyperspec_ratio$Ratio_NDVI.adj=Hyperspec_ratio$Ratio_NDVI.adj2
 ```
 

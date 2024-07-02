@@ -133,7 +133,7 @@ write.csv(model_comp,paste0("Outputs/NDVI/","NDVI_Modelcomparison_AIC.csv"),row.
 df_ed=data.frame()
 for(m in metric){
   for(site in unique(df_hyper$Site.name)){
-    model_W2.3=readRDS(paste0("Outputs/NDVI/",site,"_",m,"_W2.3_wconstraint.rds"))
+    model_W2.3=readRDS(paste0(path,"Outputs/NDVI/",site,"_",m,"_W2.3_wconstraint.rds"))
     
     ed_W2.3=data.frame(ED(model_W2.3,50,interval="delta")) %>% mutate(Site.name=site,Metric=m)
     
@@ -162,11 +162,11 @@ for(site in unique(df_filt_info$Site.name)){
 }
 
 colnames(df_ed)[1]="ED50"
-write.csv(df_ed,paste0("Outputs/NDVI/","NDVI_ED50s.csv",row.names=F))
+write.csv(df_ed,paste0(path,"Outputs/NDVI/","NDVI_ED50s.csv",row.names=F))
 
 write.csv(df_param,paste0("Outputs/NDVI/","Parameters_W2.3.csv"))
-
 ```
+
 
 
 3/ Computation of performance retention
